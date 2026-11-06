@@ -3,12 +3,14 @@ Do not expose on the public internet without auth, isolation, quotas, job queue.
 """
 from __future__ import annotations
 import json
+import os
+import secrets
 import subprocess
 import uuid
 from pathlib import Path
 from typing import Literal
 
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File, HTTPException, Header, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
@@ -16,6 +18,13 @@ from pydantic import BaseModel, Field
 ROOT = Path(__file__).resolve().parent
 DATA = ROOT / "data"
 DATA.mkdir(parents=True, exist_ok=True)
+SITE_ROOT = ROOT.parent
+ACCESS_TOKEN = os.environ.get("APP_ACCESS_TOKEN", "")
+
+def require_access(x_app_token: str | None = Header(default=None)):
+    if ACCESS_TOKEN and not secrets.compare_digest(x_app_token or "", ACCESS_TOKEN):
+        raise HTTPException(401, "Access token không hợp lệ")
+
 app = FastAPI(title="HOANGGIA SOCIAL CLIP AI — FFmpeg Clip Team", version="2.0.0")
 app.add_middleware(CORSMiddleware, allow_origins=[
     "http://localhost:8080", "http://127.0.0.1:8080",
@@ -76,7 +85,7 @@ def platforms():
     return {k:{"aspect_ratio":v[0],"max_duration_seconds":v[1]}
             for k,v in PLATFORMS.items()}
 
-@app.post("/api/media")
+@app.post("/api/media", dependencies=[Depends(require_access)])
 async def upload(file: UploadFile=File(...)):
     ext=Path(file.filename or "").suffix.lower()
     if ext not in {".mp4",".mov",".mkv",".webm"}:
@@ -101,7 +110,7 @@ async def upload(file: UploadFile=File(...)):
         raise HTTPException(400,str(exc))
     return {"media_id":media_id,"filename":file.filename,**metadata}
 
-@app.post("/api/clips")
+@app.post("/api/clips", dependencies=[Depends(require_access)])
 def render(req: ClipRequest):
     path=source(req.media_id)
     try:target,flt=output_spec(req,probe(path)["duration"])
@@ -148,3 +157,17 @@ def download(media_id: str,clip_id: str,kind: Literal["mp4","jpg","json","srt"])
     path=DATA/media_id/(clip_id+"."+kind)
     if not path.is_file():raise HTTPException(404,"Tệp không tồn tại")
     return FileResponse(path,filename="HOANGGIA-CLIP-"+clip_id[:8]+"."+kind)
+
+
+# Same-origin static frontend for a single-service Render deployment.
+@app.get("/")
+def frontend_home():
+    return FileResponse(SITE_ROOT / "index.html", media_type="text/html")
+
+@app.get("/clip-app.js")
+def frontend_js():
+    return FileResponse(SITE_ROOT / "clip-app.js", media_type="text/javascript")
+
+@app.get("/assets/logo.svg")
+def brand_icon():
+    return FileResponse(SITE_ROOT / "assets" / "logo.svg", media_type="image/svg+xml")
