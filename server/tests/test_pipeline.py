@@ -44,3 +44,21 @@ def test_render_real_ffmpeg(tmp_path,monkeypatch):
     for extension in ("mp4","jpg","json"):
         assert (directory/(report["clip_id"]+"."+extension)).is_file()
     assert m.probe(directory/(report["clip_id"]+".mp4"))["width"]==1080
+
+def test_protected_download_requires_token(tmp_path, monkeypatch):
+    monkeypatch.setattr(m, "DATA", tmp_path)
+    monkeypatch.setattr(m, "ACCESS_TOKEN", "test-secret")
+    media_id = "a" * 32
+    clip_id = "b" * 32
+    folder = tmp_path / media_id
+    folder.mkdir()
+    (folder / (clip_id + ".json")).write_text('{"ok":true}', encoding="utf-8")
+    route = "/api/clips/" + media_id + "/" + clip_id + "/json"
+    assert client.get(route).status_code == 401
+    assert client.get(route, headers={"X-App-Token":"wrong"}).status_code == 401
+    assert client.get(route, headers={"X-App-Token":"test-secret"}).status_code == 200
+
+def test_protected_upload_requires_token(monkeypatch):
+    monkeypatch.setattr(m, "ACCESS_TOKEN", "test-secret")
+    response = client.post("/api/media", files={"file": ("clip.mp4", b"test")})
+    assert response.status_code == 401
