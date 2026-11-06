@@ -57,11 +57,11 @@ $('render').onclick=async()=>{
  $('render').disabled=true;status('Đang kết nối API FFmpeg…');
  try{
   const health=await fetch(base+'/api/health',{signal:AbortSignal.timeout(8000)});if(!health.ok)throw Error('API không hoạt động');
-  const token=$('token').value.trim();const auth=token?{'X-App-Token':token}:{};const fd=new FormData();fd.append('file',srcFile);const uploaded=await fetch(base+'/api/media',{method:'POST',headers:auth,body:fd});if(!uploaded.ok)throw Error('Upload bị từ chối');
+  const token=$('token').value.trim();if(!token)throw Error('Thiếu khóa truy cập. Mở Render Dashboard → Environment → APP_ACCESS_TOKEN, sao chép vào ô Khóa truy cập API.');const auth=token?{'X-App-Token':token}:{};const fd=new FormData();fd.append('file',srcFile);const uploaded=await fetch(base+'/api/media',{method:'POST',headers:auth,body:fd});if(uploaded.status===401)throw Error('Khóa truy cập API không đúng hoặc đã hết hiệu lực (401). Kiểm tra APP_ACCESS_TOKEN trong Render → Environment.');if(uploaded.status===413)throw Error('Video vượt giới hạn tải lên (413).');if(!uploaded.ok)throw Error('Upload thất bại (HTTP '+uploaded.status+').');
   const media=await uploaded.json();status('Đang xuất MP4 qua FFmpeg…');
   const body={media_id:media.media_id,platform,start:Number(start.value),end:Number(end.value),aspect:$('aspect').value,fit:$('fit').value,subtitles:$('subtitles').value||null};
   const response=await fetch(base+'/api/clips',{method:'POST',headers:{'Content-Type':'application/json',...auth},body:JSON.stringify(body)});
-  if(!response.ok)throw Error('Render lỗi: '+(await response.text()).slice(0,200));
+  if(response.status===401)throw Error('Khóa truy cập API không hợp lệ (401).');if(!response.ok)throw Error('Render lỗi HTTP '+response.status+': '+(await response.text()).slice(0,200));
   const result=await response.json();$('json').textContent=JSON.stringify(result,null,2);
   const prefix=base+'/api/clips/'+media.media_id+'/'+result.clip_id+'/';
   async function protectedAsset(kind,id,label,filename){
@@ -73,10 +73,10 @@ $('render').onclick=async()=>{
   await protectedAsset('mp4','download','↓ Tải video MP4','HOANGGIA-clip.mp4');
   await protectedAsset('jpg','thumbnailDownload','↓ Tải thumbnail','HOANGGIA-thumbnail.jpg');
   status('FFmpeg đã render xong video và thumbnail.');
- }catch(e){status('Chưa xuất được: '+e.message+'. Web tĩnh không tự có máy chủ FFmpeg.')}
+ }catch(e){status('Chưa xuất được: '+e.message)}
  finally{refresh()}
 };
 window.addEventListener('pagehide',()=>{thumbSeq++;if(url)URL.revokeObjectURL(url)});
 buttons();refresh();
 // Auto-connect only when UI and API share the same origin.
-(async()=>{try{const r=await fetch('/api/health',{signal:AbortSignal.timeout(3000)});if(r.ok){const j=await r.json();if(j.status==='ok'){$('api').value=location.origin;refresh();$('engine-note').textContent='Đã phát hiện FFmpeg API cùng máy chủ. Nếu được yêu cầu, nhập khóa truy cập để xuất MP4.';}}}catch(e){/* Browser-only preview; no backend. */}})();
+(async()=>{try{const r=await fetch('/api/health',{signal:AbortSignal.timeout(3000)});if(r.ok){const j=await r.json();if(j.status==='ok'){$('api').value=location.origin;refresh();$('engine-note').textContent='Đã kết nối máy chủ FFmpeg. Để xuất MP4, nhập khóa APP_ACCESS_TOKEN từ Render → Environment. Không chia sẻ khóa.';}}}catch(e){/* Browser-only preview; no backend. */}})();
