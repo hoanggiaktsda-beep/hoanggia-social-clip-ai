@@ -62,3 +62,20 @@ def test_protected_upload_requires_token(monkeypatch):
     monkeypatch.setattr(m, "ACCESS_TOKEN", "test-secret")
     response = client.post("/api/media", files={"file": ("clip.mp4", b"test")})
     assert response.status_code == 401
+
+def test_hd_geometry_and_duration_limit():
+    req=m.ClipRequest(media_id="0"*32,platform="tiktok",start=0,end=5,quality="hd")
+    aspect,flt=m.output_spec(req,10)
+    assert aspect=="9:16" and "crop=720:1280" in flt
+
+def test_hd_long_clip_rejected_before_ffmpeg(tmp_path,monkeypatch):
+    monkeypatch.setattr(m,"DATA",tmp_path)
+    media_id=uuid.uuid4().hex
+    folder=tmp_path/media_id
+    folder.mkdir()
+    path=folder/"source.mp4"
+    path.write_bytes(b"dummy")
+    monkeypatch.setattr(m,"probe",lambda path:{"duration":40})
+    req=m.ClipRequest(media_id=media_id,platform="tiktok",start=0,end=20,quality="hd")
+    with pytest.raises(Exception) as exc:m.render(req)
+    assert getattr(exc.value,"status_code",None)==400
