@@ -34,8 +34,9 @@ app.add_middleware(CORSMiddleware, allow_origins=[
 PLATFORMS = {"tiktok": ("9:16", 60), "reels": ("9:16", 60),
              "shorts": ("9:16", 60), "twitter": ("16:9", 140),
              "linkedin": ("16:9", 600)}
-RATIOS = {"9:16": (1080, 1920), "16:9": (1920, 1080),
-          "1:1": (1080, 1080), "4:5": (1080, 1350)}
+RATIOS = {"9:16": (540, 960), "16:9": (960, 540),
+          "1:1": (540, 540), "4:5": (540, 675)}
+# Conservative resolution for Render Free; upgrade only after measuring peak memory.
 
 class ClipRequest(BaseModel):
     media_id: str = Field(pattern=r"^[a-f0-9]{32}$")
@@ -121,11 +122,12 @@ def render(req: ClipRequest):
     thumb=folder/(clip_id+".jpg")
     cmd=["ffmpeg","-hide_banner","-loglevel","error","-nostdin","-y",
          "-ss",str(req.start),"-i",str(path),"-t",str(req.end-req.start),
-         "-vf",flt,"-c:v","libx264","-crf","23","-preset","fast",
+         "-vf",flt,"-c:v","libx264","-crf","24","-preset","ultrafast",
+         "-threads","1", "-filter_threads","1",
          "-pix_fmt","yuv420p","-c:a","aac","-b:a","128k",
          "-movflags","+faststart",str(output)]
     try:
-        subprocess.run(cmd,check=True,capture_output=True,timeout=900)
+        subprocess.run(cmd,check=True,capture_output=True,timeout=180)
         subprocess.run(["ffmpeg","-hide_banner","-loglevel","error","-y",
             "-i",str(output),"-frames:v","1",str(thumb)],
             check=True,capture_output=True,timeout=60)
@@ -143,7 +145,7 @@ def render(req: ClipRequest):
                     "aspect_ratio":target,"file_size":info["size"]},
             "caption_status":caption,
             "thumbnail_filename":thumb.name,
-            "encoding":{"video":"H.264","crf":23,"audio":"AAC","audio_bitrate":"128k"},
+            "encoding":{"video":"H.264","crf":24,"audio":"AAC","audio_bitrate":"128k","profile":"low_memory_540p"},
             "notes":["Preset thời lượng lấy từ đặc tả agent tham khảo.",
                      "AI highlights và tạo phụ đề tự động chưa có."]}
     (folder/(clip_id+".json")).write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding="utf-8")
