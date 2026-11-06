@@ -62,3 +62,6 @@ Bản mới nằm trên nhánh rebuild-v2-clean. Giữ nguyên main và gh-pages
 - Để public production cần worker queue, quota/rate-limit, storage ngoài, làm sạch dữ liệu và kiểm soát truy cập đầy đủ.
 
 Khi kết nối Render với ChatGPT hoặc sử dụng Dashboard của Render, chọn repository này và nhánh rebuild-v2-clean, sau đó triển khai Blueprint. Không triển khai nhánh gh-pages đang bị lỗi.
+
+## Bảo vệ file đầu ra
+Các endpoint upload, render và tải MP4/JPG/JSON/SRT đều yêu cầu X-App-Token khi APP_ACCESS_TOKEN được cấu hình. Trình duyệt dùng fetch kèm header, tải về bằng Blob URL cục bộ thay vì liên kết tải trực tiếp không xác thực. Không chia sẻ khóa này công khai.
