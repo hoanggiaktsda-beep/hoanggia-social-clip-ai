@@ -48,3 +48,17 @@ CI xác minh mã JS và kiểm thử API với video FFmpeg mẫu.
 Backend này dành cho localhost. Không đưa thẳng lên Internet khi chưa có xác thực, quota, cách ly FFmpeg, hàng đợi công việc, giới hạn tài nguyên, dọn file và chính sách dữ liệu.
 
 Bản mới nằm trên nhánh rebuild-v2-clean. Giữ nguyên main và gh-pages lỗi để tránh phá dữ liệu.
+
+
+## Triển khai web trực tiếp trên Render
+
+Đã có Dockerfile và render.yaml cho một dịch vụ duy nhất, cùng origin:
+- Render đóng gói Python FastAPI + FFmpeg + web HTML/JS.
+- Website truy cập root /, API /api/health, upload /api/media, tạo clip /api/clips.
+- Render Blueprint đặt plan free dành cho preview; cần kiểm tra hạn mức Render trước khi triển khai.
+- Biến môi trường APP_ACCESS_TOKEN được Render tạo ngẫu nhiên. Người dùng có quyền truy cập cần nhập giá trị token trong UI để upload/render.
+- Không đưa token vào repository hoặc HTML public.
+- Free instance có RAM hạn chế, tự ngủ và filesystem tạm thời; file upload và clip bị mất sau khi service khởi động lại. Chỉ xử lý clip nhỏ trong thời gian thử nghiệm.
+- Để public production cần worker queue, quota/rate-limit, storage ngoài, làm sạch dữ liệu và kiểm soát truy cập đầy đủ.
+
+Khi kết nối Render với ChatGPT hoặc sử dụng Dashboard của Render, chọn repository này và nhánh rebuild-v2-clean, sau đó triển khai Blueprint. Không triển khai nhánh gh-pages đang bị lỗi.
