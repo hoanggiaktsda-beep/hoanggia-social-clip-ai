@@ -57,10 +57,10 @@ $('render').onclick=async()=>{
  $('render').disabled=true;status('Đang kết nối API FFmpeg…');
  try{
   const health=await fetch(base+'/api/health',{signal:AbortSignal.timeout(8000)});if(!health.ok)throw Error('API không hoạt động');
-  const fd=new FormData();fd.append('file',srcFile);const uploaded=await fetch(base+'/api/media',{method:'POST',body:fd});if(!uploaded.ok)throw Error('Upload bị từ chối');
+  const token=$('token').value.trim();const auth=token?{'X-App-Token':token}:{};const fd=new FormData();fd.append('file',srcFile);const uploaded=await fetch(base+'/api/media',{method:'POST',headers:auth,body:fd});if(!uploaded.ok)throw Error('Upload bị từ chối');
   const media=await uploaded.json();status('Đang xuất MP4 qua FFmpeg…');
   const body={media_id:media.media_id,platform,start:Number(start.value),end:Number(end.value),aspect:$('aspect').value,fit:$('fit').value,subtitles:$('subtitles').value||null};
-  const response=await fetch(base+'/api/clips',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  const response=await fetch(base+'/api/clips',{method:'POST',headers:{'Content-Type':'application/json',...auth},body:JSON.stringify(body)});
   if(!response.ok)throw Error('Render lỗi: '+(await response.text()).slice(0,200));
   const result=await response.json();$('json').textContent=JSON.stringify(result,null,2);
   const prefix=base+'/api/clips/'+media.media_id+'/'+result.clip_id+'/';
@@ -72,3 +72,5 @@ $('render').onclick=async()=>{
 };
 window.addEventListener('pagehide',()=>{thumbSeq++;if(url)URL.revokeObjectURL(url)});
 buttons();refresh();
+// Auto-connect only when UI and API share the same origin.
+(async()=>{try{const r=await fetch('/api/health',{signal:AbortSignal.timeout(3000)});if(r.ok){const j=await r.json();if(j.status==='ok'){$('api').value=location.origin;refresh();$('engine-note').textContent='Đã phát hiện FFmpeg API cùng máy chủ. Nếu được yêu cầu, nhập khóa truy cập để xuất MP4.';}}}catch(e){/* Browser-only preview; no backend. */}})();
