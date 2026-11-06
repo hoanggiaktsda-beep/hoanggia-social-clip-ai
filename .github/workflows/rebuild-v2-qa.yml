@@ -1,0 +1,34 @@
+name: Clean Rebuild V2 QA
+on:
+  push:
+    branches: [rebuild-v2-clean]
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  static:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate browser assets
+        run: |
+          test -s index.html
+          test -s clip-app.js
+          test -s assets/logo.svg
+          node --check clip-app.js
+          grep -q 'clip-app.js' index.html
+  ffmpeg:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+          python -m pip install -r server/requirements.txt
+      - name: Test FFmpeg pipeline
+        run: python -m pytest -q server/tests
