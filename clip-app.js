@@ -64,8 +64,14 @@ $('render').onclick=async()=>{
   if(!response.ok)throw Error('Render lỗi: '+(await response.text()).slice(0,200));
   const result=await response.json();$('json').textContent=JSON.stringify(result,null,2);
   const prefix=base+'/api/clips/'+media.media_id+'/'+result.clip_id+'/';
-  const a=$('download');a.href=prefix+'mp4';a.hidden=false;a.textContent='↓ Tải video MP4';
-  const t=$('thumbnailDownload');t.href=prefix+'jpg';t.hidden=false;t.textContent='↓ Tải thumbnail';
+  async function protectedAsset(kind,id,label,filename){
+    const res=await fetch(prefix+kind,{headers:auth});
+    if(!res.ok)throw Error('Không thể tải '+kind+' ('+res.status+')');
+    const link=$(id);unlink(link);link.href=URL.createObjectURL(await res.blob());
+    link.download=filename;link.textContent=label;link.hidden=false;
+  }
+  await protectedAsset('mp4','download','↓ Tải video MP4','HOANGGIA-clip.mp4');
+  await protectedAsset('jpg','thumbnailDownload','↓ Tải thumbnail','HOANGGIA-thumbnail.jpg');
   status('FFmpeg đã render xong video và thumbnail.');
  }catch(e){status('Chưa xuất được: '+e.message+'. Web tĩnh không tự có máy chủ FFmpeg.')}
  finally{refresh()}
