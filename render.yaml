@@ -2,7 +2,7 @@ services:
   - type: web
     name: hoanggia-social-clip-ai
     runtime: docker
-    plan: starter
+    plan: free
     dockerfilePath: ./Dockerfile
     healthCheckPath: /api/health
     envVars:
