@@ -5,9 +5,9 @@ let platform='tiktok',url=null,srcFile=null,duration=0,preview=false,thumbUrl=nu
 const video=$('video'),start=$('start'),end=$('end'),ins=$('inSlider'),outs=$('outSlider');
 const status=t=>$('status').textContent=t;
 const bounds=()=>[Number(start.value),Number(end.value)];
-function valid(){const [a,b]=bounds();return !!srcFile&&duration>0&&a>=0&&b>a+.04&&b<=duration+.02&&b-a<=P[platform][2]+.02}
+function valid(){const [a,b]=bounds();return !!srcFile&&duration>0&&a>=0&&b>a+.04&&b<=duration+.02&&b-a<=P[platform][2]+.02&&($("quality").value!=="hd"||b-a<=15.02)}
 function report(){
- const [a,b]=bounds();return {clip_id:null,platform,source_filename:srcFile?.name||null,source_duration_seconds:duration||null,range:{start:a,end:b,duration:Math.max(0,b-a)},output:{aspect_ratio:$('aspect').value,fit:$('fit').value,video_codec:'H.264',audio_codec:'AAC',crf:23,audio_bitrate:'128k'},caption_status:$('subtitles').value.trim()?'user_supplied_srt':'not_generated',thumbnail_filename:srcFile?'thumbnail.jpg':null,ai_highlight_status:'not_implemented',notes:['Platform limits are reference presets; verify before publishing','MP4 export requires a configured FFmpeg server']}}
+ const [a,b]=bounds();return {clip_id:null,platform,source_filename:srcFile?.name||null,source_duration_seconds:duration||null,range:{start:a,end:b,duration:Math.max(0,b-a)},output:{aspect_ratio:$('aspect').value,fit:$('fit').value,video_codec:'H.264',audio_codec:'AAC',crf:24,audio_bitrate:'128k',quality:$('quality').value},caption_status:$('subtitles').value.trim()?'user_supplied_srt':'not_generated',thumbnail_filename:srcFile?'thumbnail.jpg':null,ai_highlight_status:'not_implemented',notes:['Platform limits are reference presets; verify before publishing','MP4 export requires a configured FFmpeg server']}}
 function refresh(source){
  if(duration){
   if(source==='in')start.value=(duration*Number(ins.value)/1000).toFixed(2);
@@ -19,10 +19,10 @@ function refresh(source){
  const l=duration?Math.max(0,Math.min(100,a/duration*100)):0,r=duration?Math.max(0,Math.min(100,b/duration*100)):0;
  $('selection').style.left=l+'%';$('selection').style.right=(100-r)+'%';
  $('json').textContent=JSON.stringify(report(),null,2);
- const ratio=$('aspect').value,shape={'9:16':[1080,1920],'16:9':[1920,1080],'1:1':[1080,1080],'4:5':[1080,1350]}[ratio];
+ const ratio=$('aspect').value,hd=$('quality').value==='hd',shape=(hd?{'9:16':[720,1280],'16:9':[1280,720],'1:1':[720,720],'4:5':[720,900]}:{'9:16':[540,960],'16:9':[960,540],'1:1':[540,540],'4:5':[540,675]})[ratio];
  const w=shape[0],h=shape[1],fit=$('fit').value;
  const filter=fit==='crop'?'scale='+w+':'+h+':force_original_aspect_ratio=increase,crop='+w+':'+h+',setsar=1':'scale='+w+':'+h+':force_original_aspect_ratio=decrease,pad='+w+':'+h+':(ow-iw)/2:(oh-ih)/2,setsar=1';
- $('command').textContent='ffmpeg -ss '+a.toFixed(2)+' -i "input.mp4" -t '+Math.max(0,b-a).toFixed(2)+' -vf "'+filter+'" -c:v libx264 -crf 23 -preset fast -pix_fmt yuv420p -c:a aac -b:a 128k -movflags +faststart "output.mp4"';
+ $('command').textContent='ffmpeg -ss '+a.toFixed(2)+' -i "input.mp4" -t '+Math.max(0,b-a).toFixed(2)+' -vf "'+filter+'" -c:v libx264 -crf 24 -preset ultrafast -threads 1 -filter_threads 1 -pix_fmt yuv420p -c:a aac -b:a 128k -movflags +faststart "output.mp4"';
  return ok;
 }
 function buttons(){
@@ -39,7 +39,7 @@ $('file').onchange=()=>{
 video.onloadedmetadata=()=>{duration=Number.isFinite(video.duration)?video.duration:0;start.value=0;end.value=Math.min(duration,P[platform][2]).toFixed(2);refresh();status(duration?'Sẵn sàng xem trước.':'Không đọc được thời lượng.');makeThumbs()};
 video.onerror=()=>status('Không thể phát video với codec này.');
 [start,end].forEach(n=>n.oninput=()=>refresh());ins.oninput=()=>refresh('in');outs.oninput=()=>refresh('out');
-['aspect','fit','api','subtitles'].forEach(id=>$(id).addEventListener('input',()=>refresh()));
+['aspect','fit','quality','api','subtitles'].forEach(id=>$(id).addEventListener('input',()=>refresh()));
 $('timeline').onclick=e=>{if(!duration)return;const box=e.currentTarget.getBoundingClientRect();video.currentTime=Math.max(0,Math.min(duration,(e.clientX-box.left)/box.width*duration))};
 video.ontimeupdate=()=>{if(duration)$('playhead').style.left=(video.currentTime/duration*100)+'%';if(preview&&video.currentTime>=Number(end.value)){preview=false;video.pause();status('Đã xem hết đoạn cắt.')}};
 $('preview').onclick=async()=>{if(!valid())return;preview=true;video.currentTime=Number(start.value);try{await video.play();status('Đang phát đoạn cắt.')}catch(e){status('Không thể phát: '+e.message)}};
@@ -53,13 +53,13 @@ $('thumb').onclick=()=>{if(!video.videoWidth)return;const canvas=document.create
 $('copy').onclick=async()=>{try{await navigator.clipboard.writeText($('command').textContent);status('Đã sao chép lệnh FFmpeg.')}catch(e){status('Không sao chép được, hãy sao chép từ bảng lệnh.')}};
 $('jsonSave').onclick=()=>{const a=$('reportDownload');unlink(a);a.href=URL.createObjectURL(new Blob([$('json').textContent],{type:'application/json'}));a.download='HOANGGIA-clip-metadata.json';a.textContent='↓ Tải metadata JSON';a.hidden=false;a.click()};
 $('render').onclick=async()=>{
- const base=$('api').value.trim().replace(/\/+$/,'');if(!valid()||!base)return;
+ const base=$('api').value.trim().replace(/\/+$/,'');if(!valid()||!base){status('Khoảng cắt không hợp lệ. Chế độ HD 720p chỉ hỗ trợ tối đa 15 giây.');return;}
  $('render').disabled=true;status('Đang kết nối API FFmpeg…');
  try{
   const health=await fetch(base+'/api/health',{signal:AbortSignal.timeout(8000)});if(!health.ok)throw Error('API không hoạt động');
   const token=$('token').value.trim();if(!token)throw Error('Thiếu khóa truy cập. Mở Render Dashboard → Environment → APP_ACCESS_TOKEN, sao chép vào ô Khóa truy cập API.');const auth=token?{'X-App-Token':token}:{};const fd=new FormData();fd.append('file',srcFile);const uploaded=await fetch(base+'/api/media',{method:'POST',headers:auth,body:fd});if(uploaded.status===401)throw Error('Khóa truy cập API không đúng hoặc đã hết hiệu lực (401). Kiểm tra APP_ACCESS_TOKEN trong Render → Environment.');if(uploaded.status===413)throw Error('Video vượt giới hạn tải lên (413).');if(!uploaded.ok)throw Error('Upload thất bại (HTTP '+uploaded.status+').');
   const media=await uploaded.json();status('Đang xuất MP4 qua FFmpeg…');
-  const body={media_id:media.media_id,platform,start:Number(start.value),end:Number(end.value),aspect:$('aspect').value,fit:$('fit').value,subtitles:$('subtitles').value||null};
+  const body={media_id:media.media_id,platform,start:Number(start.value),end:Number(end.value),aspect:$('aspect').value,fit:$('fit').value,quality:$('quality').value,subtitles:$('subtitles').value||null};
   const response=await fetch(base+'/api/clips',{method:'POST',headers:{'Content-Type':'application/json',...auth},body:JSON.stringify(body)});
   if(response.status===401)throw Error('Khóa truy cập API không hợp lệ (401).');if(!response.ok)throw Error('Render lỗi HTTP '+response.status+': '+(await response.text()).slice(0,200));
   const result=await response.json();$('json').textContent=JSON.stringify(result,null,2);
