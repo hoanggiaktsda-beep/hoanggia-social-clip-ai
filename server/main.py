@@ -36,6 +36,8 @@ PLATFORMS = {"tiktok": ("9:16", 60), "reels": ("9:16", 60),
              "linkedin": ("16:9", 600)}
 RATIOS = {"9:16": (540, 960), "16:9": (960, 540),
           "1:1": (540, 540), "4:5": (540, 675)}
+HD_RATIOS = {"9:16": (720, 1280), "16:9": (1280, 720),
+             "1:1": (720, 720), "4:5": (720, 900)}
 # Conservative resolution for Render Free; upgrade only after measuring peak memory.
 
 class ClipRequest(BaseModel):
@@ -45,6 +47,7 @@ class ClipRequest(BaseModel):
     end: float = Field(gt=0)
     aspect: Literal["9:16","16:9","1:1","4:5"] | None = None
     fit: Literal["crop","pad"] = "crop"
+    quality: Literal["standard","hd"] = "standard"
     subtitles: str | None = Field(None, max_length=50000)
 
 def probe(path: Path):
@@ -70,7 +73,7 @@ def output_spec(req: ClipRequest, total: float):
     limit=PLATFORMS[req.platform][1]
     if req.end<=req.start or req.end>total+.1 or req.end-req.start>limit:
         raise ValueError("Khoảng cắt vượt giới hạn preset hoặc nguồn")
-    w,h=RATIOS[target]
+    w,h=(HD_RATIOS if req.quality=="hd" else RATIOS)[target]
     mode="increase" if req.fit=="crop" else "decrease"
     flt="scale="+str(w)+":"+str(h)+":force_original_aspect_ratio="+mode
     flt+=(",crop="+str(w)+":"+str(h)) if req.fit=="crop" else (
@@ -116,6 +119,8 @@ def render(req: ClipRequest):
     path=source(req.media_id)
     try:target,flt=output_spec(req,probe(path)["duration"])
     except ValueError as exc:raise HTTPException(400,str(exc))
+    if req.quality=="hd" and req.end-req.start>15:
+        raise HTTPException(400,"720p thử nghiệm giới hạn 15 giây để tránh quá tải Render Free")
     clip_id=uuid.uuid4().hex
     folder=DATA/req.media_id
     output=folder/(clip_id+".mp4")
@@ -145,7 +150,7 @@ def render(req: ClipRequest):
                     "aspect_ratio":target,"file_size":info["size"]},
             "caption_status":caption,
             "thumbnail_filename":thumb.name,
-            "encoding":{"video":"H.264","crf":24,"audio":"AAC","audio_bitrate":"128k","profile":"low_memory_540p"},
+            "encoding":{"video":"H.264","crf":24,"audio":"AAC","audio_bitrate":"128k","profile":"low_memory_"+("720p" if req.quality=="hd" else "540p")},
             "notes":["Preset thời lượng lấy từ đặc tả agent tham khảo.",
                      "AI highlights và tạo phụ đề tự động chưa có."]}
     (folder/(clip_id+".json")).write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding="utf-8")
