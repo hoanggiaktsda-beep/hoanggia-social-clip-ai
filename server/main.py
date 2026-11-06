@@ -149,7 +149,7 @@ def render(req: ClipRequest):
     (folder/(clip_id+".json")).write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding="utf-8")
     return report
 
-@app.get("/api/clips/{media_id}/{clip_id}/{kind}")
+@app.get("/api/clips/{media_id}/{clip_id}/{kind}", dependencies=[Depends(require_access)])
 def download(media_id: str,clip_id: str,kind: Literal["mp4","jpg","json","srt"]):
     for key in (media_id,clip_id):
         if len(key)!=32 or any(ch not in "0123456789abcdef" for ch in key):
