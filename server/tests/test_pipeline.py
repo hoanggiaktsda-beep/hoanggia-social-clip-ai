@@ -25,7 +25,7 @@ def test_invalid_range():
 def test_crop_geometry():
     req=m.ClipRequest(media_id="0"*32,platform="tiktok",start=0,end=5)
     aspect,flt=m.output_spec(req,10)
-    assert aspect=="9:16" and "crop=1080:1920" in flt
+    assert aspect=="9:16" and "crop=540:960" in flt
 
 def test_render_real_ffmpeg(tmp_path,monkeypatch):
     monkeypatch.setattr(m,"DATA",tmp_path)
@@ -43,7 +43,7 @@ def test_render_real_ffmpeg(tmp_path,monkeypatch):
     assert report["file"]["aspect_ratio"]=="1:1"
     for extension in ("mp4","jpg","json"):
         assert (directory/(report["clip_id"]+"."+extension)).is_file()
-    assert m.probe(directory/(report["clip_id"]+".mp4"))["width"]==1080
+    assert m.probe(directory/(report["clip_id"]+".mp4"))["width"]==540
 
 def test_protected_download_requires_token(tmp_path, monkeypatch):
     monkeypatch.setattr(m, "DATA", tmp_path)
