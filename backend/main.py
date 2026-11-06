@@ -101,3 +101,7 @@ def download(job_id:str):
     job=JOBS.get(job_id)
     if not job or job['status']!='completed': raise HTTPException(404,'Chưa có video đầu ra')
     return FileResponse(ROOT/job['media_id']/(job_id+'.mp4'),filename='hoanggia-clip.mp4',media_type='video/mp4')
+
+# P1: SQLite-backed render queue API (opt-in; legacy endpoints retained).
+from .worker import router as worker_router
+app.include_router(worker_router)
