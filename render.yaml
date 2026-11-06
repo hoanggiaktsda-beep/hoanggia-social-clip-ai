@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: hoanggia-social-clip-ai
+    runtime: docker
+    plan: starter
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/health
+    envVars:
+      - key: APP_ACCESS_TOKEN
+        generateValue: true
+      - key: PYTHONUNBUFFERED
+        value: "1"
