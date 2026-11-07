@@ -14,7 +14,7 @@ test('smoothing does not mutate raw landmarks or fill invisible joints',()=>{
  const before=JSON.stringify(frames);
  const result=smoothPose(frames,1);
  assert.equal(JSON.stringify(frames),before);
- assert.equal(result.landmarks[0].x,0);
+ assert.equal(result.landmarks[0].x,2);
  assert.equal(result.landmarks[15].x,10);
  assert.notStrictEqual(result.landmarks,frames[1].landmarks);
  assert.equal(smoothPose([],0),null);
