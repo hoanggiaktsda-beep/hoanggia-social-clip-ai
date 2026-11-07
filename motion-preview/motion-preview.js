@@ -220,6 +220,36 @@ function drawTimelineCursor(){
  const x=Math.max(0,Math.min(c.width,c.width*(Number(video.currentTime)||0)/duration));
  g.save();g.strokeStyle='#f7f3df';g.lineWidth=1.5;g.setLineDash([5,4]);g.beginPath();g.moveTo(x,0);g.lineTo(x,c.height);g.stroke();g.restore();
 }
+
+function inspectFrame(index){
+ const count=Math.max(samples.length,faceSamples.length,handSamples.length);
+ const pos=$('inspectPosition'),detail=$('inspectDetails');
+ if(!count){pos.textContent='Chưa có mẫu';detail.textContent='Chưa có dữ liệu phân tích.';$('inspectPrev').disabled=true;$('inspectNext').disabled=true;return}
+ const i=Math.max(0,Math.min(count-1,Math.trunc(Number(index)||0)));
+ const poseFrame=samples[i],faceFrame=faceSamples[i],handFrame=handSamples[i];
+ const time=Number(faceFrame?.time??poseFrame?.time??handFrame?.time??0);
+ const landmarks=poseFrame?.landmarks||[];
+ const ids={left_shoulder:11,right_shoulder:12,left_elbow:13,right_elbow:14,left_wrist:15,right_wrist:16,left_hip:23,right_hip:24,left_knee:25,right_knee:26,left_ankle:27,right_ankle:28};
+ const joints=Object.entries(ids).map(([name,id])=>{
+  const p=landmarks[id];return name+': '+(p?'visibility '+Number(p.visibility??0).toFixed(3)+(visible(p)?' · hợp lệ':' · thiếu/che khuất'):'không có dữ liệu');
+ });
+ const warnings=reviewItems(window.motionReport||{}).items.filter(item=>Number.isFinite(Number(item.time))&&Math.abs(Number(item.time)-time)<.11);
+ pos.textContent='Mẫu '+(i+1)+'/'+count+' · '+time.toFixed(2)+'s';
+ $('inspectPrev').disabled=i===0;$('inspectNext').disabled=i===count-1;
+ detail.textContent='Pose: '+(poseFrame?.pose_detected?'đã phát hiện':'không phát hiện')+
+  '\\nKhuôn mặt: '+(faceFrame?.detected?'đã phát hiện':'không phát hiện')+
+  '\\nBàn tay: '+(handFrame?.hands?.length??0)+' phát hiện'+
+  '\\nCảnh báo gần mẫu: '+(warnings.length?warnings.map(w=>w.label+' ['+(reviewDecisions[w.id]||'chưa đánh giá')+']').join('; '):'không có')+
+  '\\n\\nĐiểm khớp (tọa độ 2D tương đối):\\n'+joints.join('\\n');
+}
+function stepInspectedFrame(delta){
+ if(!faceSamples.length||running)return;
+ const slider=$('frameSlider'),next=Math.max(0,Math.min(faceSamples.length-1,Number(slider.value)+delta));
+ slider.value=String(next);slider.dispatchEvent(new Event('input'));
+}
+$('inspectPrev').addEventListener('click',()=>stepInspectedFrame(-1));
+$('inspectNext').addEventListener('click',()=>stepInspectedFrame(1));
+
 function updateTimelineSync(){
  if(!faceSamples.length||running)return;
  const index=nearestFrameIndex(Number(video.currentTime)||0);
@@ -228,6 +258,7 @@ function updateTimelineSync(){
  $('frameTime').textContent=(Number(video.currentTime)||0).toFixed(2)+'s';
  $('syncStatus').textContent='Đang xem '+(Number(video.currentTime)||0).toFixed(2)+'s · Mẫu '+(index+1)+'/'+faceSamples.length;
  if(timelineData)renderTimeline(timelineData);
+ inspectFrame(index);
 }
 video.addEventListener('timeupdate',updateTimelineSync);
 video.addEventListener('seeked',updateTimelineSync);
@@ -284,6 +315,7 @@ function applyReport(report){
  $('stats').textContent=JSON.stringify({duration_seconds:+Number(report.video.duration).toFixed(2),samples:samples.length,pose_detected:detected,detection_rate:samples.length?+(detected/samples.length).toFixed(3):0,dimensions:report.video.width+'×'+report.video.height},null,2);
  $('json').disabled=!samples.length;$('transfer').disabled=!samples.length;
  renderQualityReview();
+ inspectFrame(0);
 }
 async function recoverSession(){
  try{
