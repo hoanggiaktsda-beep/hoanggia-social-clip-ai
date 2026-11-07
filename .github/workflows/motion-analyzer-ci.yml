@@ -29,6 +29,8 @@ jobs:
           node motion-preview/tests/motion-quality.test.mjs
           node --check motion-preview/transfer-package.js
           node motion-preview/tests/transfer-package.test.mjs
+          node --check motion-preview/quality-review.js
+          node motion-preview/tests/quality-review.test.mjs
           test -s motion-preview/index.html
           test -s assets/logo.svg
           grep -q 'motion-preview.js' motion-preview/index.html
