@@ -15,7 +15,7 @@ function draw(landmarks){
  syncOverlay();
  const w=canvas.width=video.videoWidth||640,h=canvas.height=video.videoHeight||360;
  ctx.clearRect(0,0,w,h);
- if(!$('show').checked||!landmarks)return;
+ if(!$('show').checked||!landmarks){drawExtra();return}
  ctx.lineWidth=Math.max(2,w/320);ctx.strokeStyle='#e9bb68';ctx.fillStyle='#66edbc';
  for(const [a,b] of EDGES){const p=landmarks[a],q=landmarks[b];if(visible(p)&&visible(q)){ctx.beginPath();ctx.moveTo(p.x*w,p.y*h);ctx.lineTo(q.x*w,q.y*h);ctx.stroke()}}
  for(const p of landmarks){if(!visible(p))continue;ctx.beginPath();ctx.arc(p.x*w,p.y*h,Math.max(2,w/320),0,Math.PI*2);ctx.fill()}
