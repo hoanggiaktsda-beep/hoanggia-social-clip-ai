@@ -1,0 +1,17 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+const src=readFileSync(new URL('../motion-quality.js',import.meta.url),'utf8');
+const {qualityAnalysis}=await import('data:text/javascript;base64,'+Buffer.from(src).toString('base64'));
+const m=v=>v===null?null:{time:0,mouth_open:v,left_eye_open:.1,right_eye_open:.1,head_x:0,head_y:0,yaw_proxy:0};
+const original=[m(.1),m(.1),m(1),m(.1),null,m(.1)];
+original.forEach((v,i)=>{if(v)v.time=i*.2});
+const q=qualityAnalysis(original);
+assert.equal(q.total_frames,6);
+assert.equal(q.valid_frames,5);
+assert.equal(q.missing_ranges.length,1);
+assert.ok(q.flags.some(f=>f.metric==='mouth_open'));
+assert.equal(q.preview_smoothed[2].mouth_open,.1);
+assert.equal(q.original[2].mouth_open,1);
+assert.equal(original[2].mouth_open,1);
+assert.equal(qualityAnalysis([]).flags.length,0);
+console.log('Motion quality tests passed');
