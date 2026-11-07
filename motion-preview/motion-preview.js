@@ -1,7 +1,7 @@
 const $=id=>document.getElementById(id);
 const video=$('video'),canvas=$('overlay'),ctx=canvas.getContext('2d');
 const state=msg=>{$('state').textContent=msg};
-let url=null,running=false,samples=[],pose=null,sourceName='';
+let url=null,running=false,samples=[],pose=null,face=null,hands=null,sourceName='',faceSamples=[],handSamples=[],latestFace=[],latestHands=[];
 const EDGES=[[11,12],[11,13],[13,15],[12,14],[14,16],[11,23],[12,24],[23,24],[23,25],[25,27],[24,26],[26,28]];
 function syncOverlay(){
  const rect=video.getBoundingClientRect(),parent=$('viewer').getBoundingClientRect();
@@ -19,15 +19,25 @@ function draw(landmarks){
  ctx.lineWidth=Math.max(2,w/320);ctx.strokeStyle='#e9bb68';ctx.fillStyle='#66edbc';
  for(const [a,b] of EDGES){const p=landmarks[a],q=landmarks[b];if(visible(p)&&visible(q)){ctx.beginPath();ctx.moveTo(p.x*w,p.y*h);ctx.lineTo(q.x*w,q.y*h);ctx.stroke()}}
  for(const p of landmarks){if(!visible(p))continue;ctx.beginPath();ctx.arc(p.x*w,p.y*h,Math.max(2,w/320),0,Math.PI*2);ctx.fill()}
+ drawExtra();
+}
+function drawExtra(){
+ const w=canvas.width,h=canvas.height;
+ if($('showFace').checked){ctx.fillStyle='#7be8ff';for(const p of latestFace){if(p.x<0||p.x>1||p.y<0||p.y>1)continue;ctx.fillRect(p.x*w-1,p.y*h-1,2,2)}}
+ if($('showHands').checked){ctx.fillStyle='#ff8ac2';for(const hand of latestHands){for(const p of hand.landmarks){if(p.x<0||p.x>1||p.y<0||p.y>1)continue;ctx.beginPath();ctx.arc(p.x*w,p.y*h,2.5,0,Math.PI*2);ctx.fill()}}}
 }
 $('file').onchange=()=>{
  running=false;if(url)URL.revokeObjectURL(url);
  const file=$('file').files?.[0];if(!file)return;
  sourceName=file.name;url=URL.createObjectURL(file);video.src=url;
- samples=[];$('json').disabled=true;$('analyze').disabled=false;
+ samples=[];faceSamples=[];handSamples=[];latestFace=[];latestHands=[];$('json').disabled=true;$('analyze').disabled=false;
  state('Video đã chọn. Nhấn Phân tích video.');$('stats').textContent='Chưa phân tích.';
 };
 $('stop').onclick=()=>{running=false;video.pause();state('Đã dừng phân tích.')};
+async function ensureExtra(){
+ if(!face){if(typeof window.FaceMesh!=='function')throw Error('Không tải được Face Mesh');face=new window.FaceMesh({locateFile:file=>'https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh@0.4/'+file});face.setOptions({maxNumFaces:1,refineLandmarks:true,minDetectionConfidence:.5,minTrackingConfidence:.5});face.onResults(r=>{latestFace=(r.multiFaceLandmarks?.[0]||[]).map(p=>({x:+p.x.toFixed(5),y:+p.y.toFixed(5),z:+p.z.toFixed(5)}));faceSamples.push({time:+video.currentTime.toFixed(3),detected:latestFace.length>0,landmarks:latestFace})})}
+ if(!hands){if(typeof window.Hands!=='function')throw Error('Không tải được Hands');hands=new window.Hands({locateFile:file=>'https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4/'+file});hands.setOptions({maxNumHands:2,modelComplexity:1,minDetectionConfidence:.5,minTrackingConfidence:.5});hands.onResults(r=>{latestHands=(r.multiHandLandmarks||[]).map((points,i)=>({label:r.multiHandedness?.[i]?.label||'Unknown',score:r.multiHandedness?.[i]?.score||null,landmarks:points.map(p=>({x:+p.x.toFixed(5),y:+p.y.toFixed(5),z:+p.z.toFixed(5)}))}));handSamples.push({time:+video.currentTime.toFixed(3),hands:latestHands})})}
+}
 async function ensurePose(){
  if(pose)return pose;
  if(typeof window.Pose!=='function')throw Error('Không tải được MediaPipe từ CDN.');
@@ -57,7 +67,7 @@ $('analyze').onclick=async()=>{
  if(video.duration>120){state('Bản preview giới hạn video tối đa 120 giây.');return}
  running=true;samples=[];$('analyze').disabled=true;$('stop').disabled=false;$('json').disabled=true;
  try{
-   await ensurePose();video.pause();
+   await ensurePose();await ensureExtra();video.pause();
    const count=Math.min(600,Math.ceil(video.duration*5));
    for(let i=0;i<count&&running;i++){
      const t=Math.min(video.duration-.02,i/5);
@@ -65,6 +75,9 @@ $('analyze').onclick=async()=>{
      if(Math.abs(video.currentTime-t)>.025)await seekTo(t);
      if(!running)break;
      await pose.send({image:video});
+     await face.send({image:video});
+     await hands.send({image:video});
+     draw(samples.at(-1)?.landmarks||[]);
      if(i%5===0)state('Đang phân tích '+Math.round(100*(i+1)/count)+'% · '+samples.length+' mẫu');
    }
    const detected=samples.filter(x=>x.pose_detected).length;
@@ -100,9 +113,12 @@ $('analyze').onclick=async()=>{
    }
    const limbNames={left_arm:'Tay trái',right_arm:'Tay phải',left_leg:'Chân trái',right_leg:'Chân phải'};
    $('limbMetrics').textContent=Object.entries(limbStats).map(([name,v])=>limbNames[name]+': '+(v.tracking_rate<.05?'Không đủ dữ liệu (ngoài khung hình/che khuất)':Math.round(v.tracking_rate*100)+'% khung hình · tin cậy '+v.mean_visibility+' · tốc độ TB '+(motionSummary[name].mean_normalized_speed_per_second??'N/A'))).join('\n');
-   const report={schema_version:'1.1-browser-preview',source:sourceName,
+   const faceDetected=faceSamples.filter(x=>x.detected).length;
+   const handDetected=handSamples.filter(x=>x.hands.length>0).length;
+   $('faceHandMetrics').textContent='Khuôn mặt: '+faceDetected+'/'+faceSamples.length+' mẫu · Bàn tay: '+handDetected+'/'+handSamples.length+' mẫu. Điểm mặt và tay được xuất trong JSON.';
+   const report={schema_version:'1.2-browser-preview',source:sourceName,
      video:{duration:video.duration,width:video.videoWidth,height:video.videoHeight},
-     sampling_target_fps:5,limb_tracking:limbStats,motion_summary:motionSummary,motion_timeseries:motionSeries,frames:samples,
+     sampling_target_fps:5,face_tracking:{detected_frames:faceDetected,total_frames:faceSamples.length,frames:faceSamples},hand_tracking:{detected_frames:handDetected,total_frames:handSamples.length,frames:handSamples},limb_tracking:limbStats,motion_summary:motionSummary,motion_timeseries:motionSeries,frames:samples,
      limitations:['Single-person pose only','Browser-based processing','No camera tracking','No AI generation']};
    window.motionReport=report;
    $('stats').textContent=JSON.stringify({duration_seconds:+video.duration.toFixed(2),
@@ -121,4 +137,6 @@ $('json').onclick=()=>{
  setTimeout(()=>URL.revokeObjectURL(link.href),3000);
 };
 $('show').onchange=()=>{if(!$('show').checked)ctx.clearRect(0,0,canvas.width,canvas.height)};
-window.addEventListener('pagehide',()=>{running=false;if(url)URL.revokeObjectURL(url);pose?.close()});
+window.addEventListener('pagehide',()=>{running=false;if(url)URL.revokeObjectURL(url);pose?.close();face?.close();hands?.close()});
+
+for(const id of ['showFace','showHands'])$(id).addEventListener('change',()=>draw(samples.at(-1)?.landmarks||[]));
