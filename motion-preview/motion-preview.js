@@ -3,7 +3,15 @@ const video=$('video'),canvas=$('overlay'),ctx=canvas.getContext('2d');
 const state=msg=>{$('state').textContent=msg};
 let url=null,running=false,samples=[],pose=null,sourceName='';
 const EDGES=[[11,12],[11,13],[13,15],[12,14],[14,16],[11,23],[12,24],[23,24],[23,25],[25,27],[24,26],[26,28]];
+function syncOverlay(){
+ const rect=video.getBoundingClientRect(),parent=$('viewer').getBoundingClientRect();
+ canvas.style.left=(rect.left-parent.left)+'px';canvas.style.top=(rect.top-parent.top)+'px';
+ canvas.style.width=rect.width+'px';canvas.style.height=rect.height+'px';
+}
+window.addEventListener('resize',syncOverlay);
+video.addEventListener('loadedmetadata',syncOverlay);
 function draw(landmarks){
+ syncOverlay();
  const w=canvas.width=video.videoWidth||640,h=canvas.height=video.videoHeight||360;
  ctx.clearRect(0,0,w,h);
  if(!$('show').checked||!landmarks)return;
@@ -59,9 +67,18 @@ $('analyze').onclick=async()=>{
      if(i%5===0)state('Đang phân tích '+Math.round(100*(i+1)/count)+'% · '+samples.length+' mẫu');
    }
    const detected=samples.filter(x=>x.pose_detected).length;
+   const limbs={left_arm:[11,13,15],right_arm:[12,14,16],left_leg:[23,25,27],right_leg:[24,26,28]};
+   const limbStats={};
+   for(const [name,ids] of Object.entries(limbs)){
+     const values=samples.map(s=>ids.map(id=>s.landmarks[id]?.visibility||0));
+     const present=values.filter(v=>v.every(x=>x>=.5)).length;
+     limbStats[name]={tracked_frames:present,tracking_rate:samples.length?+(present/samples.length).toFixed(3):0,
+       mean_visibility:values.length?+(values.reduce((sum,v)=>sum+v.reduce((a,b)=>a+b,0)/ids.length,0)/values.length).toFixed(3):0};
+   }
+   $('limbMetrics').textContent=Object.entries(limbStats).map(([name,v])=>name+': '+Math.round(v.tracking_rate*100)+'% khung hình · tin cậy '+v.mean_visibility).join('\n');
    const report={schema_version:'1.1-browser-preview',source:sourceName,
      video:{duration:video.duration,width:video.videoWidth,height:video.videoHeight},
-     sampling_target_fps:5,frames:samples,
+     sampling_target_fps:5,limb_tracking:limbStats,frames:samples,
      limitations:['Single-person pose only','Browser-based processing','No camera tracking','No AI generation']};
    window.motionReport=report;
    $('stats').textContent=JSON.stringify({duration_seconds:+video.duration.toFixed(2),
