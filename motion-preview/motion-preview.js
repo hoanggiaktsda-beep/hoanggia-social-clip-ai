@@ -74,7 +74,7 @@ $('analyze').onclick=async()=>{
  if(running)return;
  if(!Number.isFinite(video.duration)||video.duration<=0){state('Chờ video tải xong metadata.');return}
  if(video.duration>120){state('Bản preview giới hạn video tối đa 120 giây.');return}
- running=true;samples=[];$('analyze').disabled=true;$('stop').disabled=false;$('json').disabled=true;
+ running=true;samples=[];faceSamples=[];handSamples=[];latestFace=[];latestHands=[];$('analyze').disabled=true;$('stop').disabled=false;$('json').disabled=true;
  try{
    await ensurePose();await ensureExtra();video.pause();
    const count=Math.min(600,Math.ceil(video.duration*5));
