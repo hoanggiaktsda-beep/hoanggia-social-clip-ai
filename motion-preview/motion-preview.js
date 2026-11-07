@@ -98,7 +98,8 @@ $('analyze').onclick=async()=>{
        peak_normalized_speed_per_second:values.length?+Math.max(...values).toFixed(4):null,
        valid_motion_intervals:values.length};
    }
-   $('limbMetrics').textContent=Object.entries(limbStats).map(([name,v])=>name+': '+Math.round(v.tracking_rate*100)+'% khung hình · tin cậy '+v.mean_visibility+' · tốc độ TB '+(motionSummary[name].mean_normalized_speed_per_second??'N/A')).join('\n');
+   const limbNames={left_arm:'Tay trái',right_arm:'Tay phải',left_leg:'Chân trái',right_leg:'Chân phải'};
+   $('limbMetrics').textContent=Object.entries(limbStats).map(([name,v])=>limbNames[name]+': '+(v.tracking_rate<.05?'Không đủ dữ liệu (ngoài khung hình/che khuất)':Math.round(v.tracking_rate*100)+'% khung hình · tin cậy '+v.mean_visibility+' · tốc độ TB '+(motionSummary[name].mean_normalized_speed_per_second??'N/A'))).join('\n');
    const report={schema_version:'1.1-browser-preview',source:sourceName,
      video:{duration:video.duration,width:video.videoWidth,height:video.videoHeight},
      sampling_target_fps:5,limb_tracking:limbStats,motion_summary:motionSummary,motion_timeseries:motionSeries,frames:samples,
