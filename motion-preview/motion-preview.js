@@ -13,7 +13,7 @@ const video=$('video'),canvas=$('overlay'),ctx=canvas.getContext('2d');
 const state=msg=>{$('state').textContent=msg};
 let visualDescription={};
 function showPrompt(report){
- const prompt=buildVideoPrompt(report,visualDescription);
+ const prompt=buildVideoPrompt(report,visualDescription,Number($('outputDuration').value));
  $('masterPrompt').value=prompt;
  $('copyPrompt').disabled=!prompt;
  $('promptStatus').textContent=prompt?'Đã tạo MASTER PROMPT. Nếu chưa bật AI Vision, trang phục và bối cảnh chưa được tự nhận diện.':'Chưa có dữ liệu Pose để tạo prompt.';
@@ -25,6 +25,7 @@ $('quickAnalyze').addEventListener('click',()=>{
  if($('visionKey').value.trim()&&!$('visionConsent').checked){$('aiSettings').open=true;$('promptStatus').textContent='Hãy tích đồng ý gửi 3 khung hình trong Cài đặt AI, hoặc xóa API key để chỉ phân tích chuyển động.';return}
  $('analyze').click();
 });
+$('outputDuration').addEventListener('change',()=>{if(window.motionReport)showPrompt(window.motionReport)});
 $('copyPrompt').addEventListener('click',async()=>{
  try{await navigator.clipboard.writeText($('masterPrompt').value);$('promptStatus').textContent='Đã sao chép prompt.'}
  catch(e){$('masterPrompt').focus();$('masterPrompt').select();$('promptStatus').textContent='Trình duyệt chặn sao chép tự động. Hãy nhấn Ctrl+C.'}
