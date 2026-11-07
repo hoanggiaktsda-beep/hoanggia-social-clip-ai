@@ -1,10 +1,12 @@
 import {buildTimeline} from './facial-metrics.js';
 import {qualityAnalysis} from './motion-quality.js';
 import {transferPackage,classifyChanges} from './transfer-package.js';
+import {reviewItems,reviewedPackage} from './quality-review.js';
 const $=id=>document.getElementById(id);
 const video=$('video'),canvas=$('overlay'),ctx=canvas.getContext('2d');
 const state=msg=>{$('state').textContent=msg};
 let timelineData=null,qualityData=null;
+let reviewDecisions={};
 let url=null,running=false,samples=[],pose=null,face=null,hands=null,sourceName='',faceSamples=[],handSamples=[],latestFace=[],latestHands=[];
 const EDGES=[[11,12],[11,13],[13,15],[12,14],[14,16],[11,23],[12,24],[23,24],[23,25],[25,27],[24,26],[26,28]];
 function syncOverlay(){
@@ -34,7 +36,7 @@ $('file').onchange=()=>{
  running=false;if(url)URL.revokeObjectURL(url);
  const file=$('file').files?.[0];if(!file)return;
  sourceName=file.name;url=URL.createObjectURL(file);video.src=url;
- samples=[];faceSamples=[];handSamples=[];latestFace=[];latestHands=[];timelineData=null;qualityData=null;$('transfer').disabled=true;$('reviewButtons').replaceChildren();$('qualityFlags').textContent='Chưa đánh giá chất lượng.';$('smooth').checked=false;$('frameSlider').disabled=true;$('facialSummary').textContent='Chưa có dữ liệu khuôn mặt.';$('json').disabled=true;$('analyze').disabled=false;
+ samples=[];faceSamples=[];handSamples=[];latestFace=[];latestHands=[];timelineData=null;qualityData=null;reviewDecisions={};$('reviewList').replaceChildren();$('reviewExport').disabled=true;$('reviewStatus').textContent='Chưa có dữ liệu phân tích.';$('reviewReadiness').textContent='';$('transfer').disabled=true;$('reviewButtons').replaceChildren();$('qualityFlags').textContent='Chưa đánh giá chất lượng.';$('smooth').checked=false;$('frameSlider').disabled=true;$('facialSummary').textContent='Chưa có dữ liệu khuôn mặt.';$('json').disabled=true;$('analyze').disabled=false;
  state('Video đã chọn. Nhấn Phân tích video.');$('stats').textContent='Chưa phân tích.';
 };
 $('stop').onclick=()=>{running=false;video.pause();state('Đã dừng phân tích.')};
@@ -138,6 +140,7 @@ $('analyze').onclick=async()=>{
      sampling_target_fps:5,motion_quality:qualityData,facial_motion:timelineData,face_tracking:{detected_frames:faceDetected,total_frames:faceSamples.length,frames:faceSamples},hand_tracking:{detected_frames:handDetected,total_frames:handSamples.length,frames:handSamples},limb_tracking:limbStats,motion_summary:motionSummary,motion_timeseries:motionSeries,frames:samples,
      limitations:['Single-person pose only','Browser-based processing','No camera tracking','No AI generation']};
    window.motionReport=report;
+   reviewDecisions={};renderQualityReview();
    $('transfer').disabled=!samples.length;
    $('stats').textContent=JSON.stringify({duration_seconds:+video.duration.toFixed(2),
      samples:samples.length,pose_detected:detected,
@@ -195,4 +198,35 @@ $('transfer').addEventListener('click',()=>{
  link.href=URL.createObjectURL(blob);link.download='HOANGGIA-motion-transfer-v1.json';link.click();
  setTimeout(()=>URL.revokeObjectURL(link.href),3000);
  }catch(e){state('Không xuất được gói chuyển động: '+e.message)}
+});
+
+function renderQualityReview(){
+ const report=window.motionReport;if(!report)return;
+ const {readiness,items}=reviewItems(report),list=$('reviewList');
+ const decided=items.filter(i=>['accepted','rejected'].includes(reviewDecisions[i.id])).length;
+ $('reviewStatus').textContent='Đã đánh giá '+decided+'/'+items.length+' cảnh báo · '+(readiness.status==='facial_2d_ready'?'Đủ độ phủ mặt 2D':'Cần kiểm tra chất lượng');
+ $('reviewReadiness').textContent='Khuôn mặt: '+readiness.face_valid+'/'+readiness.face_total+' ('+Math.round(readiness.face_coverage*100)+'%) · Bàn tay bất thường: '+readiness.duplicate_hand_frames.length+' khung · Chuyển động bất thường: '+readiness.abrupt_change_count+' · Cơ thể: chưa đạt điều kiện chuyển toàn thân'+(readiness.blockers.length?'\nCảnh báo chặn: '+readiness.blockers.join(', '):'');
+ list.replaceChildren();
+ for(const item of items){
+  const row=document.createElement('div');row.className='review-item';
+  const label=document.createElement('div');label.textContent=(item.kind==='hands'?'Bàn tay · ':'Chuyển động · ')+item.label;row.appendChild(label);
+  const seek=document.createElement('button');seek.type='button';seek.textContent='Xem khung hình';seek.onclick=()=>{const slider=$('frameSlider');slider.value=String(item.index);slider.dispatchEvent(new Event('input'));document.getElementById('viewer').scrollIntoView({behavior:'smooth',block:'center'})};row.appendChild(seek);
+  for(const [value,caption] of [['accepted','Chấp nhận'],['rejected','Đánh dấu lỗi']]){
+   const btn=document.createElement('button');btn.type='button';btn.textContent=(reviewDecisions[item.id]===value?'✓ ':'')+caption;
+   btn.setAttribute('aria-pressed',String(reviewDecisions[item.id]===value));
+   btn.onclick=()=>{reviewDecisions[item.id]=value;renderQualityReview()};row.appendChild(btn);
+  }
+  list.appendChild(row);
+ }
+ if(!items.length){const note=document.createElement('p');note.textContent='Không có cảnh báo theo ngưỡng hiện tại.';list.appendChild(note)}
+ $('reviewExport').disabled=decided!==items.length;
+}
+$('reviewExport').addEventListener('click',()=>{
+ if(!window.motionReport)return;
+ try{
+  const pkg=reviewedPackage(window.motionReport,reviewDecisions);
+  const blob=new Blob([JSON.stringify(pkg,null,2)],{type:'application/json'});
+  const link=document.createElement('a');link.href=URL.createObjectURL(blob);link.download='HOANGGIA-motion-reviewed-v1.json';link.click();
+  setTimeout(()=>URL.revokeObjectURL(link.href),3000);
+ }catch(e){state('Không xuất được gói đánh giá: '+e.message)}
 });
