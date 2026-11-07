@@ -1,6 +1,8 @@
+import {buildTimeline} from './facial-metrics.js';
 const $=id=>document.getElementById(id);
 const video=$('video'),canvas=$('overlay'),ctx=canvas.getContext('2d');
 const state=msg=>{$('state').textContent=msg};
+let timelineData=null;
 let url=null,running=false,samples=[],pose=null,face=null,hands=null,sourceName='',faceSamples=[],handSamples=[],latestFace=[],latestHands=[];
 const EDGES=[[11,12],[11,13],[13,15],[12,14],[14,16],[11,23],[12,24],[23,24],[23,25],[25,27],[24,26],[26,28]];
 function syncOverlay(){
@@ -30,7 +32,7 @@ $('file').onchange=()=>{
  running=false;if(url)URL.revokeObjectURL(url);
  const file=$('file').files?.[0];if(!file)return;
  sourceName=file.name;url=URL.createObjectURL(file);video.src=url;
- samples=[];faceSamples=[];handSamples=[];latestFace=[];latestHands=[];$('json').disabled=true;$('analyze').disabled=false;
+ samples=[];faceSamples=[];handSamples=[];latestFace=[];latestHands=[];timelineData=null;$('frameSlider').disabled=true;$('facialSummary').textContent='Chưa có dữ liệu khuôn mặt.';$('json').disabled=true;$('analyze').disabled=false;
  state('Video đã chọn. Nhấn Phân tích video.');$('stats').textContent='Chưa phân tích.';
 };
 $('stop').onclick=()=>{running=false;video.pause();state('Đã dừng phân tích.')};
@@ -116,9 +118,14 @@ $('analyze').onclick=async()=>{
    const faceDetected=faceSamples.filter(x=>x.detected).length;
    const handDetected=handSamples.filter(x=>x.hands.length>0).length;
    $('faceHandMetrics').textContent='Khuôn mặt: '+faceDetected+'/'+faceSamples.length+' mẫu · Bàn tay: '+handDetected+'/'+handSamples.length+' mẫu. Điểm mặt và tay được xuất trong JSON.';
-   const report={schema_version:'1.2-browser-preview',source:sourceName,
+   timelineData=buildTimeline(faceSamples);
+   renderTimeline(timelineData);
+   $('frameSlider').max=Math.max(0,faceSamples.length-1);
+   $('frameSlider').value='0';$('frameSlider').disabled=!faceSamples.length;
+   $('facialSummary').textContent='Mẫu mặt hợp lệ: '+timelineData.valid_frames+'/'+faceSamples.length+' · Số bước nhảy đột ngột (ngưỡng tham khảo 0.25): '+Object.values(timelineData.summary).reduce((n,v)=>n+v.jump_count,0);
+   const report={schema_version:'1.3-browser-preview',source:sourceName,
      video:{duration:video.duration,width:video.videoWidth,height:video.videoHeight},
-     sampling_target_fps:5,face_tracking:{detected_frames:faceDetected,total_frames:faceSamples.length,frames:faceSamples},hand_tracking:{detected_frames:handDetected,total_frames:handSamples.length,frames:handSamples},limb_tracking:limbStats,motion_summary:motionSummary,motion_timeseries:motionSeries,frames:samples,
+     sampling_target_fps:5,facial_motion:timelineData,face_tracking:{detected_frames:faceDetected,total_frames:faceSamples.length,frames:faceSamples},hand_tracking:{detected_frames:handDetected,total_frames:handSamples.length,frames:handSamples},limb_tracking:limbStats,motion_summary:motionSummary,motion_timeseries:motionSeries,frames:samples,
      limitations:['Single-person pose only','Browser-based processing','No camera tracking','No AI generation']};
    window.motionReport=report;
    $('stats').textContent=JSON.stringify({duration_seconds:+video.duration.toFixed(2),
@@ -140,3 +147,28 @@ $('show').onchange=()=>{if(!$('show').checked)ctx.clearRect(0,0,canvas.width,can
 window.addEventListener('pagehide',()=>{running=false;if(url)URL.revokeObjectURL(url);pose?.close();face?.close();hands?.close()});
 
 for(const id of ['showFace','showHands'])$(id).addEventListener('change',()=>draw(samples.at(-1)?.landmarks||[]));
+
+function renderTimeline(data){
+ const c=$('timeline'),g=c.getContext('2d'),w=c.width,h=c.height;
+ g.clearRect(0,0,w,h);g.fillStyle='#101b17';g.fillRect(0,0,w,h);
+ const series=[['mouth_open','#e7c78d'],['left_eye_open','#78d6fa'],['right_eye_open','#e98db5'],['yaw_proxy','#94db9c']];
+ for(const [key,color] of series){
+   const pts=data.metrics.map((m,i)=>m?{x:i/Math.max(1,data.metrics.length-1)*w,y:m[key]}:null).filter(Boolean);
+   if(pts.length<2)continue;
+   const values=pts.map(p=>p.y),lo=Math.min(...values),hi=Math.max(...values);
+   g.strokeStyle=color;g.lineWidth=2;g.beginPath();
+   pts.forEach((p,i)=>{const y=h-15-(p.y-lo)/Math.max(.0001,hi-lo)*(h-30);i?g.lineTo(p.x,y):g.moveTo(p.x,y)});
+   g.stroke();
+ }
+ g.fillStyle='#e9eee9';g.font='13px system-ui';g.fillText('Vàng: miệng · Xanh: mắt trái · Hồng: mắt phải · Lục: lệch đầu 2D',12,18);
+}
+$('frameSlider').addEventListener('input',async()=>{
+ if(running||!faceSamples.length)return;
+ const i=Number($('frameSlider').value),t=faceSamples[i]?.time;
+ if(t===undefined)return;
+ $('frameTime').textContent=t.toFixed(2)+'s';
+ try{video.pause();if(Math.abs(video.currentTime-t)>.025)await seekTo(t);
+   latestFace=faceSamples[i]?.landmarks||[];latestHands=handSamples[i]?.hands||[];
+   draw(samples[i]?.landmarks||[]);
+ }catch(e){state('Không tua được: '+e.message)}
+});
