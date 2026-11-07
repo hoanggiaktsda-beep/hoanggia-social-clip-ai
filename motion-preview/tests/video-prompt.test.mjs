@@ -37,3 +37,14 @@ test('duration selector scales timeline and enforces 30 second cap',()=>{
  const invalid=buildVideoPrompt(report,{},NaN);
  assert.match(invalid,/Mục tiêu: tạo video 10 giây/);
 });
+
+test('naturalness guidance does not invent dialogue and preserves requested duration',()=>{
+ const report={video:{duration:6,width:1080,height:1920},frames:[frame(0,.2),frame(1,.35),frame(2,.5),frame(3,.65),frame(4,.8),frame(5,.85)]};
+ const prompt=buildVideoPrompt(report,{},15);
+ assert.match(prompt,/Mục tiêu: tạo video 15 giây/);
+ assert.match(prompt,/FACIAL PERFORMANCE/);
+ assert.match(prompt,/MOTION NATURALNESS/);
+ assert.match(prompt,/không tự tạo lời nói/);
+ assert.match(prompt,/Nhịp chuyển động/);
+ assert.doesNotMatch(prompt,/video gốc|video tham chiếu/i);
+});
