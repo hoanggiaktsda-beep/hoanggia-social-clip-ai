@@ -1,3 +1,4 @@
+import {buildVideoPrompt} from './video-prompt.js';
 import {selectSample,smoothPose} from './motion-sampling.js';
 import {renderSkeleton} from './motion-reconstruction.js';
 import {buildTimeline} from './facial-metrics.js';
@@ -9,6 +10,23 @@ import {saveSession,loadSession,clearSession,saveReport,listSessions,selectSessi
 const $=id=>document.getElementById(id);
 const video=$('video'),canvas=$('overlay'),ctx=canvas.getContext('2d');
 const state=msg=>{$('state').textContent=msg};
+function showPrompt(report){
+ const prompt=buildVideoPrompt(report);
+ $('masterPrompt').value=prompt;
+ $('copyPrompt').disabled=!prompt;
+ $('promptStatus').textContent=prompt?'Đã tạo bản nháp từ dữ liệu chuyển động 2D. Kiểm tra các mục [ ] trước khi đưa vào Flow.':'Chưa có dữ liệu Pose để tạo prompt.';
+}
+$('quickAnalyze').addEventListener('click',()=>{
+ if(!$('file').files?.length&&!activeFile){$('promptStatus').textContent='Vui lòng chọn video trước.';return}
+ $('advanced').open=true;
+ $('promptStatus').textContent='Đang phân tích video...';
+ $('analyze').click();
+});
+$('copyPrompt').addEventListener('click',async()=>{
+ try{await navigator.clipboard.writeText($('masterPrompt').value);$('promptStatus').textContent='Đã sao chép prompt.'}
+ catch(e){$('masterPrompt').focus();$('masterPrompt').select();$('promptStatus').textContent='Trình duyệt chặn sao chép tự động. Hãy nhấn Ctrl+C.'}
+});
+
 let timelineData=null,qualityData=null;
 let reviewDecisions={};
 let activeFile=null,url=null,running=false,samples=[],pose=null,face=null,hands=null,sourceName='',faceSamples=[],handSamples=[],latestFace=[],latestHands=[];
@@ -187,6 +205,7 @@ $('analyze').onclick=async()=>{
      limitations:['Single-person pose only','Browser-based processing','No camera tracking','No AI generation']};
    window.motionReport=report;
    applyReport(report);
+   showPrompt(report);
    saveReport(report).then(()=>{renderSessions();$('sessionStatus').textContent='Đã lưu video và kết quả phân tích trên thiết bị.'}).catch(e=>{$('sessionStatus').textContent='Không lưu được kết quả: '+e.message});
    state(running?'Phân tích hoàn tất. Có thể tải motion.json.':'Đã dừng. Kết quả một phần có thể tải.');
  }catch(e){state('Không phân tích được: '+e.message)}
