@@ -48,3 +48,13 @@ test('naturalness guidance does not invent dialogue and preserves requested dura
  assert.match(prompt,/Nhịp chuyển động/);
  assert.doesNotMatch(prompt,/video gốc|video tham chiếu/i);
 });
+
+test('semantic vision beats replace generic landmark drift and scale with duration',()=>{
+ const report={video:{duration:14.7,width:1080,height:1920},frames:[frame(0,.2),frame(7,.5),frame(14,.8)]};
+ const visual={actions:[{start:0,end:7.35,action:'Đưa tay lên gần cằm rồi hạ xuống',face:'Ánh mắt chuyển nhẹ sang bên'},{start:7.35,end:14.7,action:'Nghiêng đầu và chỉnh tóc',face:'Môi khép tự nhiên'}]};
+ const prompt=buildVideoPrompt(report,visual,10);
+ assert.match(prompt,/0\.0–5\.0s: Đưa tay lên gần cằm/);
+ assert.match(prompt,/5\.0–10\.0s: Nghiêng đầu/);
+ assert.doesNotMatch(prompt,/đầu\/mũi dịch/);
+ assert.doesNotMatch(prompt,/video gốc|video tham chiếu/i);
+});
