@@ -16,6 +16,22 @@ jobs:
         run: |
           python -m compileall -q recreator
           python -m unittest discover -s recreator/tests -v
+  browser-preview:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate standalone preview
+        run: |
+          node --check motion-preview/motion-preview.js
+          test -s motion-preview/index.html
+          test -s assets/logo.svg
+          grep -q 'motion-preview.js' motion-preview/index.html
+      - uses: actions/upload-artifact@v4
+        with:
+          name: motion-preview-v1-1
+          path: |
+            motion-preview/
+            assets/logo.svg
   integration:
     runs-on: ubuntu-latest
     steps:
