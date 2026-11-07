@@ -23,12 +23,28 @@ export function transferPackage(report){
  if(!report||!Array.isArray(report.frames)||!Array.isArray(report.face_tracking?.frames))throw Error('Missing motion frames');
  const faces=report.face_tracking.frames,hands=report.hand_tracking?.frames||[],body=report.frames;
  const duration=Number(report.video?.duration)||0;
- const samples=faces.map((f,i)=>({
-  time:f.time,face:f.detected?f.landmarks:null,
-  hands:(hands[i]?.hands||[]).slice(0,2),pose:body[i]?.pose_detected?body[i].landmarks:null,
-  facial_2d:report.facial_motion?.metrics?.[i]||null,
-  warnings:(report.motion_quality?.flags||[]).filter(w=>w.index===i).map(w=>({metric:w.metric,delta:w.delta}))
- }));
+ // Re-analysis in older sessions could append face/hand callbacks three times.
+ // Keep the first complete sample per centisecond without mutating source data.
+ const seen=new Set(),samples=[];
+ const nearest=(frames,time)=>frames.reduce((best,f)=>{
+  const gap=Math.abs(Number(f?.time)-time);
+  return Number.isFinite(gap)&&(!best||gap<best.gap)?{frame:f,gap}:best;
+ },null)?.frame;
+ for(let i=0;i<faces.length;i++){
+  const f=faces[i],time=Number(f.time);
+  if(!Number.isFinite(time))continue;
+  const key=Math.round(time*100);
+  if(seen.has(key))continue;
+  seen.add(key);
+  const hand=nearest(hands,time),pose=nearest(body,time);
+  samples.push({
+   time:f.time,face:f.detected?f.landmarks:null,
+   hands:(hand?.hands||[]).slice(0,2),pose:pose?.pose_detected?pose.landmarks:null,
+   facial_2d:nearest(report.facial_motion?.metrics||[],time)||null,
+   warnings:(report.motion_quality?.flags||[]).filter(w=>Math.round(Number(w.time)*100)===key).map(w=>({metric:w.metric,delta:w.delta}))
+  });
+ }
+
  return {schema:'hoanggia.motion-transfer.v1',source:{filename:report.source,duration_seconds:duration,width:report.video?.width,height:report.video?.height},
   sampling_fps:report.sampling_target_fps||5,coordinate_system:'image_normalized_xy',samples,readiness:assessTransferReadiness(report),
   quality:{face_valid:faces.filter(f=>f.detected).length,total:faces.length,flagged:(report.motion_quality?.flags||[]).length},
