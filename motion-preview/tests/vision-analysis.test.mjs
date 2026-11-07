@@ -4,7 +4,7 @@ import {describeFrames} from '../vision-analysis.js';
 test('vision requires a user-supplied key',async()=>{
  await assert.rejects(describeFrames({duration:5},''),/API key/);
 });
-test('vision uses only 3 sampled frames and parses grounded fields',async()=>{
+test('vision uses only 9 sampled frames and parses grounded fields',async()=>{
  const original=globalThis.document;
  globalThis.document={createElement:()=>({width:0,height:0,getContext:()=>({drawImage(){}}),toDataURL:()=> 'data:image/jpeg;base64,AAAA'})};
  let time=0;
@@ -17,7 +17,7 @@ test('vision uses only 3 sampled frames and parses grounded fields',async()=>{
    assert.match(url,/generativelanguage.googleapis.com/);
    assert.equal(opts.headers['x-goog-api-key'],'test-key');
    const parts=JSON.parse(opts.body).contents[0].parts;
-   assert.equal(parts.filter(p=>p.inline_data).length,3);
+   assert.equal(parts.filter(p=>p.inline_data).length,9);
    return {ok:true,json:async()=>({candidates:[{content:{parts:[{text:JSON.stringify({wardrobe:'Áo trắng',scene:'Phòng khách',camera:'Trung cảnh',expression:'Mỉm cười'})}]}}]})};
   }});
   assert.equal(data.wardrobe,'Áo trắng');
