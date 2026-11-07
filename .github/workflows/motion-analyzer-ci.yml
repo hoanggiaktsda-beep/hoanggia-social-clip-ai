@@ -34,6 +34,13 @@ jobs:
           node --check motion-preview/vision-analysis.js
           node motion-preview/tests/vision-analysis.test.mjs
           grep -q 'visionConsent' motion-preview/index.html
+          python - <<'PY'
+          from pathlib import Path
+          html=Path('motion-preview/index.html').read_text()
+          assert html.index('id="aiSettings"') < html.index('id="visionKey"')
+          assert 'id="aiSettings" class="ai-settings"' in html
+          assert 'id="viewer"' in html and 'id="quickAnalyze"' in html
+          PY
           grep -q 'masterPrompt' motion-preview/index.html
           python - <<'PY'
           from pathlib import Path
