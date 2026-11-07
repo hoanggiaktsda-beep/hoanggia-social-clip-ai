@@ -28,3 +28,12 @@ assert.equal(transferPackage(flagged).samples[0].hands.length,2);
 assert.equal(transferPackage(flagged).readiness.video_generation_ready,false);
 assert.equal(assessTransferReadiness({...flagged,hand_tracking:{frames:[{hands:[]}]}}).status,'facial_2d_ready');
 console.log('V1.6 readiness gate tests passed');
+
+const repeated={...report,
+ frames:[{time:0,pose_detected:false},{time:.2,pose_detected:false},{time:0,pose_detected:false},{time:.2,pose_detected:false}],
+ face_tracking:{frames:[{time:0,detected:true,landmarks:face},{time:.2,detected:true,landmarks:face},{time:0,detected:true,landmarks:face},{time:.2,detected:true,landmarks:face}]},
+ hand_tracking:{frames:[{time:0,hands:[]},{time:.2,hands:[]},{time:0,hands:[]},{time:.2,hands:[]}]},
+ facial_motion:{metrics:[{time:0},{time:.2},{time:0},{time:.2}]}
+};
+assert.deepEqual(transferPackage(repeated).samples.map(s=>s.time),[0,.2]);
+console.log('Legacy repeated samples deduplication passed');
