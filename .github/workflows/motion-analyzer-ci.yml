@@ -32,6 +32,12 @@ jobs:
           node --check motion-preview/video-prompt.js
           node motion-preview/tests/video-prompt.test.mjs
           grep -q 'masterPrompt' motion-preview/index.html
+          python - <<'PY'
+          from pathlib import Path
+          html=Path('motion-preview/index.html').read_text()
+          assert html.index('id="viewer"') < html.index('id="advanced"'), 'Video player must remain visible outside advanced panel'
+          assert html.index('id="viewer"') < html.index('id="masterPrompt"'), 'Video must precede prompt output'
+          PY
           node --check motion-preview/facial-metrics.js
           node motion-preview/tests/facial-metrics.test.mjs
           node --check motion-preview/motion-quality.js
