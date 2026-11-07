@@ -10,14 +10,15 @@ function syncOverlay(){
 }
 window.addEventListener('resize',syncOverlay);
 video.addEventListener('loadedmetadata',syncOverlay);
+function visible(p){return !!p&&p.visibility>=.6&&p.x>=0&&p.x<=1&&p.y>=0&&p.y<=1}
 function draw(landmarks){
  syncOverlay();
  const w=canvas.width=video.videoWidth||640,h=canvas.height=video.videoHeight||360;
  ctx.clearRect(0,0,w,h);
  if(!$('show').checked||!landmarks)return;
  ctx.lineWidth=Math.max(2,w/320);ctx.strokeStyle='#e9bb68';ctx.fillStyle='#66edbc';
- for(const [a,b] of EDGES){const p=landmarks[a],q=landmarks[b];if(p?.visibility>.4&&q?.visibility>.4){ctx.beginPath();ctx.moveTo(p.x*w,p.y*h);ctx.lineTo(q.x*w,q.y*h);ctx.stroke()}}
- for(const p of landmarks){if(p.visibility<.4)continue;ctx.beginPath();ctx.arc(p.x*w,p.y*h,Math.max(2,w/320),0,Math.PI*2);ctx.fill()}
+ for(const [a,b] of EDGES){const p=landmarks[a],q=landmarks[b];if(visible(p)&&visible(q)){ctx.beginPath();ctx.moveTo(p.x*w,p.y*h);ctx.lineTo(q.x*w,q.y*h);ctx.stroke()}}
+ for(const p of landmarks){if(!visible(p))continue;ctx.beginPath();ctx.arc(p.x*w,p.y*h,Math.max(2,w/320),0,Math.PI*2);ctx.fill()}
 }
 $('file').onchange=()=>{
  running=false;if(url)URL.revokeObjectURL(url);
@@ -70,7 +71,7 @@ $('analyze').onclick=async()=>{
    const limbs={left_arm:[11,13,15],right_arm:[12,14,16],left_leg:[23,25,27],right_leg:[24,26,28]};
    const limbStats={};
    for(const [name,ids] of Object.entries(limbs)){
-     const values=samples.map(s=>ids.map(id=>s.landmarks[id]?.visibility||0));
+     const values=samples.map(s=>ids.map(id=>visible(s.landmarks[id])?s.landmarks[id].visibility:0));
      const present=values.filter(v=>v.every(x=>x>=.5)).length;
      limbStats[name]={tracked_frames:present,tracking_rate:samples.length?+(present/samples.length).toFixed(3):0,
        mean_visibility:values.length?+(values.reduce((sum,v)=>sum+v.reduce((a,b)=>a+b,0)/ids.length,0)/values.length).toFixed(3):0};
@@ -83,7 +84,7 @@ $('analyze').onclick=async()=>{
      for(const [name,ids] of Object.entries(limbs)){
        const values=ids.map(id=>{
          const p=a.landmarks[id],q=b.landmarks[id];
-         if(!p||!q||p.visibility<.5||q.visibility<.5)return null;
+         if(!visible(p)||!visible(q))return null;
          return Math.hypot(q.x-p.x,q.y-p.y)/dt;
        }).filter(v=>v!==null);
        velocity[name]=values.length===ids.length?+(values.reduce((x,y)=>x+y,0)/values.length).toFixed(4):null;
@@ -97,7 +98,7 @@ $('analyze').onclick=async()=>{
        peak_normalized_speed_per_second:values.length?+Math.max(...values).toFixed(4):null,
        valid_motion_intervals:values.length};
    }
-   $('limbMetrics').textContent=Object.entries(limbStats).map(([name,v])=>name+': '+Math.round(v.tracking_rate*100)+'% khung hình · tin cậy '+v.mean_visibility+' · tốc độ TB '+(motionSummary[name].mean_normalized_speed_per_second??'N/A')).join('\\n');
+   $('limbMetrics').textContent=Object.entries(limbStats).map(([name,v])=>name+': '+Math.round(v.tracking_rate*100)+'% khung hình · tin cậy '+v.mean_visibility+' · tốc độ TB '+(motionSummary[name].mean_normalized_speed_per_second??'N/A')).join('\n');
    const report={schema_version:'1.1-browser-preview',source:sourceName,
      video:{duration:video.duration,width:video.videoWidth,height:video.videoHeight},
      sampling_target_fps:5,limb_tracking:limbStats,motion_summary:motionSummary,motion_timeseries:motionSeries,frames:samples,
