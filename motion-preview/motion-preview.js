@@ -3,7 +3,7 @@ import {qualityAnalysis} from './motion-quality.js';
 import {transferPackage,classifyChanges} from './transfer-package.js';
 import {reviewItems,reviewedPackage} from './quality-review.js';
 import {restoreReview,saveReview,handAnomalies} from './hand-quality.js';
-import {saveSession,loadSession,clearSession,saveReport} from './session-store.js';
+import {saveSession,loadSession,clearSession,saveReport,listSessions,selectSession,deleteSession,savePosition} from './session-store.js';
 const $=id=>document.getElementById(id);
 const video=$('video'),canvas=$('overlay'),ctx=canvas.getContext('2d');
 const state=msg=>{$('state').textContent=msg};
@@ -38,7 +38,7 @@ $('file').onchange=async()=>{
  running=false;if(url)URL.revokeObjectURL(url);
  const file=$('file').files?.[0];if(!file)return;
  sourceName=file.name;activeFile=file;url=URL.createObjectURL(file);video.src=url;
- try{await saveSession(file);$('sessionStatus').textContent='Đã lưu video trên thiết bị; có thể tải lại trang.'}catch(e){$('sessionStatus').textContent='Không lưu được video: '+e.message+' — hãy giữ bản gốc.'}
+ try{await saveSession(file);await renderSessions();$('sessionStatus').textContent='Đã lưu video trên thiết bị; có thể tải lại trang.'}catch(e){$('sessionStatus').textContent='Không lưu được video: '+e.message+' — hãy giữ bản gốc.'}
  samples=[];faceSamples=[];handSamples=[];latestFace=[];latestHands=[];timelineData=null;qualityData=null;reviewDecisions={};$('reviewList').replaceChildren();$('reviewExport').disabled=true;$('reviewStatus').textContent='Chưa có dữ liệu phân tích.';$('reviewReadiness').textContent='';$('transfer').disabled=true;$('reviewButtons').replaceChildren();$('qualityFlags').textContent='Chưa đánh giá chất lượng.';$('smooth').checked=false;$('frameSlider').disabled=true;$('facialSummary').textContent='Chưa có dữ liệu khuôn mặt.';$('json').disabled=true;$('analyze').disabled=false;
  state('Video đã chọn. Nhấn Phân tích video.');$('stats').textContent='Chưa phân tích.';
 };
@@ -144,7 +144,7 @@ $('analyze').onclick=async()=>{
      limitations:['Single-person pose only','Browser-based processing','No camera tracking','No AI generation']};
    window.motionReport=report;
    applyReport(report);
-   saveReport(report).then(()=>{$('sessionStatus').textContent='Đã lưu video và kết quả phân tích trên thiết bị.'}).catch(e=>{$('sessionStatus').textContent='Không lưu được kết quả: '+e.message});
+   saveReport(report).then(()=>{renderSessions();$('sessionStatus').textContent='Đã lưu video và kết quả phân tích trên thiết bị.'}).catch(e=>{$('sessionStatus').textContent='Không lưu được kết quả: '+e.message});
    state(running?'Phân tích hoàn tất. Có thể tải motion.json.':'Đã dừng. Kết quả một phần có thể tải.');
  }catch(e){state('Không phân tích được: '+e.message)}
  finally{running=false;$('stop').disabled=true;$('analyze').disabled=false}
@@ -234,17 +234,36 @@ async function recoverSession(){
   activeFile=new File([saved.file],saved.filename,{type:saved.type});sourceName=saved.filename;
   if(url)URL.revokeObjectURL(url);url=URL.createObjectURL(activeFile);video.src=url;
   $('analyze').disabled=false;
+  video.addEventListener('loadedmetadata',()=>{video.currentTime=Math.min(saved.position||0,Math.max(0,(video.duration||0)-.05))},{once:true});
   if(saved.report){applyReport(saved.report);state('Đã khôi phục video và kết quả phân tích từ phiên trước.');}
   else state('Đã khôi phục video nguồn. Có thể phân tích lại.');
   $('sessionStatus').textContent='Phiên được lưu trên thiết bị · '+(saved.size/1048576).toFixed(1)+' MB · '+saved.updated_at;
+  await renderSessions();
  }catch(e){$('sessionStatus').textContent='Không khôi phục được phiên: '+e.message}
 }
 $('clearSession').onclick=async()=>{
  if(!confirm('Xóa video và kết quả phân tích đã lưu trên thiết bị này?'))return;
- try{await clearSession();$('sessionStatus').textContent='Đã xóa phiên đã lưu. Tải lại trang để bắt đầu mới.'}
+ try{const saved=await loadSession();if(saved?.id)await deleteSession(saved.id);else await clearSession();await renderSessions();$('sessionStatus').textContent='Đã xóa phiên đang mở. Tải lại trang hoặc chọn phiên khác.'}
  catch(e){$('sessionStatus').textContent='Không xóa được phiên: '+e.message}
 };
-recoverSession();
+async function renderSessions(){
+ const list=$('sessionList');list.replaceChildren();
+ try{
+  const sessions=await listSessions();
+  const active=await loadSession();
+  for(const entry of sessions){
+   const row=document.createElement('div');row.className='session-row';
+   const label=document.createElement('span');label.textContent=entry.filename+' · '+(entry.size/1048576).toFixed(1)+' MB · '+(entry.analyzed?'Đã phân tích':'Chưa phân tích')+(entry.id===active?.id?' · Đang mở':'');row.appendChild(label);
+   const open=document.createElement('button');open.type='button';open.textContent='Mở phiên';open.onclick=async()=>{if(running)return;try{await selectSession(entry.id);location.reload()}catch(e){state(e.message)}};row.appendChild(open);
+   const del=document.createElement('button');del.type='button';del.textContent='Xóa';del.onclick=async()=>{if(!confirm('Xóa phiên '+entry.filename+'?'))return;try{await deleteSession(entry.id);await renderSessions()}catch(e){state(e.message)}};row.appendChild(del);
+   list.appendChild(row);
+  }
+  if(!sessions.length)list.textContent='Chưa có phiên đã lưu.';
+ }catch(e){list.textContent='Không đọc được thư viện phiên: '+e.message}
+}
+let lastSavedPosition=0;
+video.addEventListener('timeupdate',()=>{if(!activeFile||running)return;const now=Date.now();if(now-lastSavedPosition<3000)return;lastSavedPosition=now;savePosition(video.currentTime).catch(()=>{})});
+recoverSession().then(renderSessions);
 
 function renderQualityReview(){
  const report=window.motionReport;if(!report)return;
