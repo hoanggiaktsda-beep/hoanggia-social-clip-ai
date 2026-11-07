@@ -1,3 +1,4 @@
+import {renderSkeleton} from './motion-reconstruction.js';
 import {buildTimeline} from './facial-metrics.js';
 import {qualityAnalysis} from './motion-quality.js';
 import {transferPackage,classifyChanges} from './transfer-package.js';
@@ -264,6 +265,12 @@ function alignedSample(frames,time,tolerance=.12){
  for(const frame of frames){const d=Math.abs(Number(frame?.time)-time);if(Number.isFinite(d)&&d<delta){best=frame;delta=d}}
  return delta<=tolerance?best:null;
 }
+function updateReconstruction(time){
+ const frame=alignedSample(samples,time);
+ const result=renderSkeleton($('skeleton3d'),frame,Number($('orbitAngle').value));
+ $('reconstructionStatus').textContent=frame?'Mốc '+time.toFixed(2)+'s · Độ phủ khớp tin cậy: '+Math.round(result.coverage*100)+'% · '+(result.status==='experimental'?'Có thể xem thử':'Dữ liệu yếu, không đủ xác nhận chuyển động'):'Không có mẫu Pose đồng bộ tại '+time.toFixed(2)+'s';
+}
+$('orbitAngle').addEventListener('input',()=>{$('orbitValue').textContent=$('orbitAngle').value+'°';updateReconstruction(Number(video.currentTime)||0)});
 function inspectFrame(index){
  const count=Math.max(samples.length,faceSamples.length,handSamples.length);
  const pos=$('inspectPosition'),detail=$('inspectDetails');
@@ -273,6 +280,7 @@ function inspectFrame(index){
  const time=Number(anchor?.time??0);
  const poseFrame=alignedSample(samples,time),faceFrame=alignedSample(faceSamples,time),handFrame=alignedSample(handSamples,time);
  const landmarks=poseFrame?.landmarks||[];
+ updateReconstruction(time);
  if(!running){latestFace=faceFrame?.landmarks||[];latestHands=handFrame?.hands||[];draw(landmarks)}
  const ids={left_shoulder:11,right_shoulder:12,left_elbow:13,right_elbow:14,left_wrist:15,right_wrist:16,left_hip:23,right_hip:24,left_knee:25,right_knee:26,left_ankle:27,right_ankle:28};
  const joints=Object.entries(ids).map(([name,id])=>{
