@@ -79,3 +79,21 @@ def test_hd_long_clip_rejected_before_ffmpeg(tmp_path,monkeypatch):
     req=m.ClipRequest(media_id=media_id,platform="tiktok",start=0,end=20,quality="hd")
     with pytest.raises(Exception) as exc:m.render(req)
     assert getattr(exc.value,"status_code",None)==400
+
+def test_montage_two_ranges(tmp_path,monkeypatch):
+    monkeypatch.setattr(m,"DATA",tmp_path)
+    monkeypatch.setattr(m,"ACCESS_TOKEN","")
+    media_id=uuid.uuid4().hex
+    folder=tmp_path/media_id
+    folder.mkdir()
+    subprocess.run(["ffmpeg","-hide_banner","-loglevel","error","-y",
+        "-f","lavfi","-i","testsrc2=s=160x90:r=10:d=3",
+        "-c:v","libx264","-pix_fmt","yuv420p",str(folder/"source.mp4")],
+        check=True,timeout=30)
+    req=m.MontageRequest(media_id=media_id,platform="tiktok",
+        segments=[m.Segment(start=0,end=0.6),m.Segment(start=1,end=1.6)])
+    result=m.montage(req)
+    output=folder/(result["clip_id"]+".mp4")
+    assert output.is_file()
+    assert len(result["segments"])==2
+    assert 1.0 <= m.probe(output)["duration"] <= 1.8
