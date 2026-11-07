@@ -31,6 +31,9 @@ jobs:
           node motion-preview/tests/motion-sampling.test.mjs
           node --check motion-preview/video-prompt.js
           node motion-preview/tests/video-prompt.test.mjs
+          node --check motion-preview/vision-analysis.js
+          node motion-preview/tests/vision-analysis.test.mjs
+          grep -q 'visionConsent' motion-preview/index.html
           grep -q 'masterPrompt' motion-preview/index.html
           python - <<'PY'
           from pathlib import Path
