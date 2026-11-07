@@ -207,11 +207,11 @@ function renderTimeline(data){
  const active=$('smooth').checked&&qualityData?qualityData.preview_smoothed:data.metrics;
  const series=[['mouth_open','#e7c78d'],['left_eye_open','#78d6fa'],['right_eye_open','#e98db5'],['yaw_proxy','#94db9c']];
  for(const [key,color] of series){
-   const pts=active.map((m,i)=>m?{x:i/Math.max(1,active.length-1)*w,y:m[key]}:null).filter(Boolean);
-   if(pts.length<2)continue;
-   const values=pts.map(p=>p.y),lo=Math.min(...values),hi=Math.max(...values);
+   const pts=active.map((m,i)=>m&&Number.isFinite(Number(m[key]))?{x:i/Math.max(1,active.length-1)*w,y:Number(m[key]),index:i}:null);
+   const values=pts.filter(Boolean).map(p=>p.y);if(values.length<2)continue;
+   const lo=Math.min(...values),hi=Math.max(...values);
    g.strokeStyle=color;g.lineWidth=2;g.beginPath();
-   pts.forEach((p,i)=>{const y=h-15-(p.y-lo)/Math.max(.0001,hi-lo)*(h-30);i?g.lineTo(p.x,y):g.moveTo(p.x,y)});
+   let connected=false;pts.forEach(p=>{if(!p){connected=false;return}const y=h-15-(p.y-lo)/Math.max(.0001,hi-lo)*(h-30);connected?g.lineTo(p.x,y):g.moveTo(p.x,y);connected=true});
    g.stroke();
  }
  g.fillStyle='#e9eee9';g.font='13px system-ui';g.fillText('Vàng: miệng · Xanh: mắt trái · Hồng: mắt phải · Lục: lệch đầu 2D',12,18);
@@ -249,8 +249,11 @@ function nearestFrameIndex(time){
 }
 function drawTimelineCursor(){
  if(!timelineData||!faceSamples.length)return;
- const c=$('timeline'),g=c.getContext('2d'),duration=Number(video.duration)||Number(faceSamples.at(-1)?.time)||1;
- const x=Math.max(0,Math.min(c.width,c.width*(Number(video.currentTime)||0)/duration));
+ const c=$('timeline'),g=c.getContext('2d');
+ const last=Number(faceSamples.at(-1)?.time)||0;
+ const duration=Number.isFinite(video.duration)&&video.duration>0?video.duration:Math.max(.001,last);
+ const current=Number.isFinite(video.currentTime)?video.currentTime:Number(faceSamples[Number($('frameSlider').value)]?.time)||0;
+ const x=Math.max(0,Math.min(c.width,c.width*current/duration));
  g.save();g.strokeStyle='#f7f3df';g.lineWidth=1.5;g.setLineDash([5,4]);g.beginPath();g.moveTo(x,0);g.lineTo(x,c.height);g.stroke();g.restore();
 }
 
@@ -333,7 +336,7 @@ function applyReport(report){
  $('frameSlider').max=Math.max(0,faceSamples.length-1);
  $('frameSlider').value='0';$('frameSlider').disabled=!faceSamples.length;
  const flags=qualityData.flags||[];
- $('qualityFlags').textContent='Cảnh báo biến thiên đột ngột: '+flags.length+' · Khoảng thiếu dữ liệu: '+(qualityData.missing_ranges||[]).length+'\\n'+flags.slice(0,24).map(f=>Number(f.time).toFixed(2)+'s · '+f.metric+' · Δ='+f.delta).join('\\n');
+ $('qualityFlags').textContent='Cảnh báo biến thiên đột ngột: '+flags.length+' · Khoảng thiếu dữ liệu: '+(qualityData.missing_ranges||[]).length+'\n'+flags.slice(0,24).map(f=>Number(f.time).toFixed(2)+'s · '+f.metric+' · Δ='+f.delta).join('\n');
  const reviewBox=$('reviewButtons');reviewBox.replaceChildren();
  for(const flag of classifyChanges(timelineData.metrics,flags).slice(0,30)){
   const btn=document.createElement('button');btn.type='button';btn.textContent=Number(flag.time).toFixed(2)+'s · '+flag.metric;
