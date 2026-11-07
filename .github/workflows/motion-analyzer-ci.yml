@@ -29,6 +29,9 @@ jobs:
           node --check motion-preview/motion-sampling.js
           node --check motion-preview/motion-reconstruction.js
           node motion-preview/tests/motion-sampling.test.mjs
+          node --check motion-preview/video-prompt.js
+          node motion-preview/tests/video-prompt.test.mjs
+          grep -q 'masterPrompt' motion-preview/index.html
           node --check motion-preview/facial-metrics.js
           node motion-preview/tests/facial-metrics.test.mjs
           node --check motion-preview/motion-quality.js
