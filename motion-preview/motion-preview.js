@@ -75,10 +75,32 @@ $('analyze').onclick=async()=>{
      limbStats[name]={tracked_frames:present,tracking_rate:samples.length?+(present/samples.length).toFixed(3):0,
        mean_visibility:values.length?+(values.reduce((sum,v)=>sum+v.reduce((a,b)=>a+b,0)/ids.length,0)/values.length).toFixed(3):0};
    }
-   $('limbMetrics').textContent=Object.entries(limbStats).map(([name,v])=>name+': '+Math.round(v.tracking_rate*100)+'% khung hình · tin cậy '+v.mean_visibility).join('\n');
+   const motionSeries=[];
+   for(let i=1;i<samples.length;i++){
+     const a=samples[i-1],b=samples[i],dt=b.time-a.time;
+     if(dt<=0)continue;
+     const velocity={time:b.time};
+     for(const [name,ids] of Object.entries(limbs)){
+       const values=ids.map(id=>{
+         const p=a.landmarks[id],q=b.landmarks[id];
+         if(!p||!q||p.visibility<.5||q.visibility<.5)return null;
+         return Math.hypot(q.x-p.x,q.y-p.y)/dt;
+       }).filter(v=>v!==null);
+       velocity[name]=values.length===ids.length?+(values.reduce((x,y)=>x+y,0)/values.length).toFixed(4):null;
+     }
+     motionSeries.push(velocity);
+   }
+   const motionSummary={};
+   for(const name of Object.keys(limbs)){
+     const values=motionSeries.map(v=>v[name]).filter(v=>v!==null);
+     motionSummary[name]={mean_normalized_speed_per_second:values.length?+(values.reduce((a,b)=>a+b,0)/values.length).toFixed(4):null,
+       peak_normalized_speed_per_second:values.length?+Math.max(...values).toFixed(4):null,
+       valid_motion_intervals:values.length};
+   }
+   $('limbMetrics').textContent=Object.entries(limbStats).map(([name,v])=>name+': '+Math.round(v.tracking_rate*100)+'% khung hình · tin cậy '+v.mean_visibility+' · tốc độ TB '+(motionSummary[name].mean_normalized_speed_per_second??'N/A')).join('\\n');
    const report={schema_version:'1.1-browser-preview',source:sourceName,
      video:{duration:video.duration,width:video.videoWidth,height:video.videoHeight},
-     sampling_target_fps:5,limb_tracking:limbStats,frames:samples,
+     sampling_target_fps:5,limb_tracking:limbStats,motion_summary:motionSummary,motion_timeseries:motionSeries,frames:samples,
      limitations:['Single-person pose only','Browser-based processing','No camera tracking','No AI generation']};
    window.motionReport=report;
    $('stats').textContent=JSON.stringify({duration_seconds:+video.duration.toFixed(2),
