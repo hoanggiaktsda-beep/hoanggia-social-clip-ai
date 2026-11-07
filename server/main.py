@@ -156,6 +156,74 @@ def render(req: ClipRequest):
     (folder/(clip_id+".json")).write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding="utf-8")
     return report
 
+
+class Segment(BaseModel):
+    start: float = Field(ge=0)
+    end: float = Field(gt=0)
+
+class MontageRequest(BaseModel):
+    media_id: str = Field(pattern=r"^[a-f0-9]{32}$")
+    segments: list[Segment] = Field(min_length=2,max_length=8)
+    platform: Literal["tiktok","reels","shorts","twitter","linkedin"]
+    aspect: Literal["9:16","16:9","1:1","4:5"] | None = None
+    fit: Literal["crop","pad"] = "crop"
+    quality: Literal["standard","hd"] = "standard"
+
+@app.post("/api/montage", dependencies=[Depends(require_access)])
+def montage(req: MontageRequest):
+    """Join selected ranges from ONE source. Encode each part consistently, then concat."""
+    import tempfile
+    path=source(req.media_id)
+    total=probe(path)["duration"]
+    duration=sum(p.end-p.start for p in req.segments)
+    limit=min(PLATFORMS[req.platform][1],15 if req.quality=="hd" else 60)
+    if duration>limit or duration<=0:
+        raise HTTPException(400,"Tổng thời lượng vượt giới hạn xử lý")
+    spec=ClipRequest(media_id=req.media_id,platform=req.platform,start=0,end=1,
+                     aspect=req.aspect,fit=req.fit,quality=req.quality)
+    target,flt=output_spec(spec,total)
+    for p in req.segments:
+        if p.end<=p.start+.05 or p.end>total+.1:
+            raise HTTPException(400,"Đoạn cắt không hợp lệ")
+    folder=DATA/req.media_id
+    clip_id=uuid.uuid4().hex
+    output=folder/(clip_id+".mp4")
+    thumb=folder/(clip_id+".jpg")
+    try:
+        with tempfile.TemporaryDirectory(dir=folder) as temp:
+            temp=Path(temp)
+            parts=[]
+            for i,p in enumerate(req.segments):
+                part=temp/("part_"+str(i)+".mp4")
+                cmd=["ffmpeg","-hide_banner","-loglevel","error","-nostdin","-y",
+                     "-ss",str(p.start),"-i",str(path),"-t",str(p.end-p.start),
+                     "-vf",flt,"-c:v","libx264","-crf","24","-preset","ultrafast",
+                     "-threads","1","-filter_threads","1","-pix_fmt","yuv420p",
+                     "-c:a","aac","-b:a","128k","-ar","44100","-ac","2",str(part)]
+                subprocess.run(cmd,check=True,capture_output=True,timeout=120)
+                parts.append(part)
+            manifest=temp/"list.txt"
+            manifest.write_text("".join("file '"+p.name+"'\\n" for p in parts),encoding="utf-8")
+            subprocess.run(["ffmpeg","-hide_banner","-loglevel","error","-nostdin","-y",
+                "-f","concat","-safe","1","-i",str(manifest),"-c","copy",
+                "-movflags","+faststart",str(output)],
+                check=True,capture_output=True,timeout=90)
+        subprocess.run(["ffmpeg","-hide_banner","-loglevel","error","-nostdin","-y",
+            "-i",str(output),"-frames:v","1",str(thumb)],check=True,capture_output=True,timeout=45)
+        info=probe(output)
+    except (subprocess.SubprocessError,OSError,ValueError) as exc:
+        output.unlink(missing_ok=True)
+        thumb.unlink(missing_ok=True)
+        raise HTTPException(500,"Không thể ghép các đoạn video") from exc
+    report={"clip_id":clip_id,"platform":req.platform,
+            "file":{"filename":output.name,"duration":info["duration"],
+                    "aspect_ratio":target,"file_size":info["size"]},
+            "segments":[p.model_dump() for p in req.segments],
+            "quality":req.quality,"thumbnail_filename":thumb.name,
+            "notes":["Ghép nhiều đoạn từ cùng một video nguồn; chưa hỗ trợ nhiều video nguồn."]}
+    (folder/(clip_id+".json")).write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding="utf-8")
+    return report
+
 @app.get("/api/clips/{media_id}/{clip_id}/{kind}", dependencies=[Depends(require_access)])
 def download(media_id: str,clip_id: str,kind: Literal["mp4","jpg","json","srt"]):
     for key in (media_id,clip_id):
