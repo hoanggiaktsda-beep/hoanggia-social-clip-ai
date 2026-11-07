@@ -203,7 +203,7 @@ def montage(req: MontageRequest):
                 subprocess.run(cmd,check=True,capture_output=True,timeout=120)
                 parts.append(part)
             manifest=temp/"list.txt"
-            manifest.write_text("".join("file '"+p.name+"'\\n" for p in parts),encoding="utf-8")
+            manifest.write_text("".join("file '"+p.name+"'\n" for p in parts),encoding="utf-8")
             subprocess.run(["ffmpeg","-hide_banner","-loglevel","error","-nostdin","-y",
                 "-f","concat","-safe","1","-i",str(manifest),"-c","copy",
                 "-movflags","+faststart",str(output)],
