@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 180" role="img" aria-labelledby="title desc">
+<title id="title">HOANGGIA AI monogram</title>
+<desc id="desc">Architectural H and A monogram with a gold window detail.</desc>
+<rect width="180" height="180" rx="8" fill="#070807"/>
+<path d="M25 28H54V137H25Z" fill="#dedbd2"/>
+<path d="M54 76H92V28H105L155 137H126L92 61V137H54Z" fill="#d0cbc0"/>
+<path d="M92 28V137" stroke="#f1eee6" stroke-width="1.2" opacity=".8"/>
+<path d="M17 137H155" stroke="#a9966d" stroke-width="1" opacity=".7"/>
+<path d="M92 14V152" stroke="#8f8a7d" stroke-width="1" opacity=".55"/>
+<path d="M92 28L126 137" stroke="#e0b96e" stroke-width="2.6"/>
+<g fill="#dcb66d"><rect x="101" y="105" width="8" height="8"/><rect x="112" y="105" width="8" height="8"/><rect x="101" y="116" width="8" height="8"/><rect x="112" y="116" width="8" height="8"/></g>
+</svg>
