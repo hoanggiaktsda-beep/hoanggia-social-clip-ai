@@ -122,7 +122,7 @@ $('analyze').onclick=async()=>{
    timelineData=buildTimeline(faceSamples);
    qualityData=qualityAnalysis(timelineData.metrics);
    renderTimeline(timelineData);
-   $('qualityFlags').textContent='Cảnh báo biến thiên đột ngột: '+qualityData.flags.length+' · Khoảng thiếu dữ liệu: '+qualityData.missing_ranges.length+'\\n'+qualityData.flags.slice(0,24).map(f=>f.time.toFixed(2)+'s · '+f.metric+' · Δ='+f.delta).join('\\n');
+   $('qualityFlags').textContent='Cảnh báo biến thiên đột ngột: '+qualityData.flags.length+' · Khoảng thiếu dữ liệu: '+qualityData.missing_ranges.length+'\n'+qualityData.flags.slice(0,24).map(f=>f.time.toFixed(2)+'s · '+f.metric+' · Δ='+f.delta).join('\n');
    $('frameSlider').max=Math.max(0,faceSamples.length-1);
    $('frameSlider').value='0';$('frameSlider').disabled=!faceSamples.length;
    $('facialSummary').textContent='Mẫu mặt hợp lệ: '+timelineData.valid_frames+'/'+faceSamples.length+' · Số bước nhảy đột ngột (ngưỡng tham khảo 0.25): '+Object.values(timelineData.summary).reduce((n,v)=>n+v.jump_count,0);
