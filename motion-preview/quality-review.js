@@ -4,7 +4,17 @@ export function reviewItems(report){
  const ready=assessTransferReadiness(report);
  const flags=(report.motion_quality?.flags||[]).map((f,i)=>({id:'motion-'+i,index:f.index,time:f.time,kind:'motion',label:`${Number(f.time).toFixed(2)}s · ${f.metric} · Δ=${f.delta}`}));
  const hands=handAnomalies(report).map((f,i)=>({id:'hands-'+i,index:f.index,time:f.time,kind:'hands',classification:f.classification,suspected_duplicates:f.suspected_duplicates,label:`${Number(f.time??0).toFixed(2)}s · ${f.detected_count} bàn tay phát hiện · ${f.classification==='possible_duplicate'?'nghi trùng điểm cổ tay':'chưa xác định nguyên nhân'}`}));
- return {readiness:ready,items:[...flags,...hands].sort((a,b)=>(a.time??0)-(b.time??0))};
+ // Deduplicate only identical review events. Keep the first ID for stored decisions.
+ // Use the sampled frame index when available; otherwise a 10 ms time bucket.
+ const seen=new Set(),items=[];
+ for(const item of [...flags,...hands]){
+  const frame=Number.isInteger(item.index)?'frame:'+item.index:'time:'+Math.round(Number(item.time||0)*100);
+  const metric=item.kind==='motion'?(report.motion_quality?.flags?.[Number(item.id.split('-')[1])]?.metric||'unknown'):'extra_hands';
+  const key=item.kind+'|'+frame+'|'+metric;
+  if(seen.has(key))continue;
+  seen.add(key);items.push(item);
+ }
+ return {readiness:ready,items:items.sort((a,b)=>(a.time??0)-(b.time??0))};
 }
 export function reviewedPackage(report,decisions){
  const {readiness,items}=reviewItems(report);
