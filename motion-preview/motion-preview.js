@@ -1,3 +1,4 @@
+import {selectSample,smoothPose} from './motion-sampling.js';
 import {renderSkeleton} from './motion-reconstruction.js';
 import {buildTimeline} from './facial-metrics.js';
 import {qualityAnalysis} from './motion-quality.js';
@@ -266,11 +267,13 @@ function alignedSample(frames,time,tolerance=.12){
  return delta<=tolerance?best:null;
 }
 function updateReconstruction(time){
- const frame=alignedSample(samples,time);
+ const matched=selectSample(samples,time,.12);
+ const frame=matched?($('skeletonSmooth').checked?smoothPose(samples,matched.index):matched.frame):null;
  const result=renderSkeleton($('skeleton3d'),frame,Number($('orbitAngle').value));
- $('reconstructionStatus').textContent=frame?'Mốc '+time.toFixed(2)+'s · Độ phủ khớp tin cậy: '+Math.round(result.coverage*100)+'% · '+(result.status==='experimental'?'Có thể xem thử':'Dữ liệu yếu, không đủ xác nhận chuyển động'):'Không có mẫu Pose đồng bộ tại '+time.toFixed(2)+'s';
+ $('reconstructionStatus').textContent=matched?'Video '+time.toFixed(2)+'s · Mẫu Pose '+matched.frame.time.toFixed(2)+'s · Δ '+matched.delta.toFixed(3)+'s · Độ phủ: '+Math.round(result.coverage*100)+'% · '+(result.status==='experimental'?'2.5D thử nghiệm':'Dữ liệu yếu')+($('skeletonSmooth').checked?' · Đang xem bản làm mượt':' · Dữ liệu thô'):'Không có mẫu Pose đồng bộ ±0,12s tại '+time.toFixed(2)+'s';
 }
 $('orbitAngle').addEventListener('input',()=>{$('orbitValue').textContent=$('orbitAngle').value+'°';updateReconstruction(Number(video.currentTime)||0)});
+$('skeletonSmooth').addEventListener('change',()=>updateReconstruction(Number(video.currentTime)||0));
 function inspectFrame(index){
  const count=Math.max(samples.length,faceSamples.length,handSamples.length);
  const pos=$('inspectPosition'),detail=$('inspectDetails');
