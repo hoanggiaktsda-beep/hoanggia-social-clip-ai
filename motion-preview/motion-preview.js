@@ -53,7 +53,7 @@ $('analyze').onclick=async()=>{
    for(let i=0;i<count&&running;i++){
      const t=Math.min(video.duration-.02,i/5);
      if(t<0)break;
-     await seekTo(t);
+     if(Math.abs(video.currentTime-t)>.025)await seekTo(t);
      if(!running)break;
      await pose.send({image:video});
      if(i%5===0)state('Đang phân tích '+Math.round(100*(i+1)/count)+'% · '+samples.length+' mẫu');
