@@ -23,3 +23,17 @@ test('visual descriptions are incorporated when supplied by a verified vision sy
  assert.match(prompt,/CAMERA: Góc máy ngang tầm mắt/);
  assert.doesNotMatch(prompt,/14\.7 giây/);
 });
+
+test('duration selector scales timeline and enforces 30 second cap',()=>{
+ const report={video:{duration:14.7,width:1080,height:1920},frames:[frame(0,.2),frame(7,.5),frame(14,.8)]};
+ const long=buildVideoPrompt(report,{},30);
+ assert.match(long,/Mục tiêu: tạo video 30 giây/);
+ assert.match(long,/28\.0–30\.0s/);
+ assert.doesNotMatch(long,/video gốc|video tham chiếu/i);
+ const capped=buildVideoPrompt(report,{},999);
+ assert.match(capped,/Mục tiêu: tạo video 30 giây/);
+ const short=buildVideoPrompt(report,{},5);
+ assert.match(short,/Mục tiêu: tạo video 5 giây/);
+ const invalid=buildVideoPrompt(report,{},NaN);
+ assert.match(invalid,/Mục tiêu: tạo video 10 giây/);
+});
