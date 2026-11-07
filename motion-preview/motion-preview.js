@@ -18,7 +18,6 @@ function showPrompt(report){
 }
 $('quickAnalyze').addEventListener('click',()=>{
  if(!$('file').files?.length&&!activeFile){$('promptStatus').textContent='Vui lòng chọn video trước.';return}
- $('advanced').open=true;
  $('promptStatus').textContent='Đang phân tích video...';
  if($('analyze').disabled){$('promptStatus').textContent='Video đang tải hoặc chưa sẵn sàng để phân tích.';return}
  $('analyze').click();
