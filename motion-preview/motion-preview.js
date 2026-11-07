@@ -229,9 +229,9 @@ $('frameSlider').addEventListener('input',async()=>{
   try{
    if(Math.abs(video.currentTime-t)>.025)await seekTo(t);
    if(seekVersion!==syncSeekVersion)return;
-   latestFace=faceSamples[i]?.landmarks||[];
-   latestHands=handSamples[i]?.hands||[];
-   draw(samples[i]?.landmarks||[]);
+   latestFace=alignedSample(faceSamples,t)?.landmarks||[];
+   latestHands=alignedSample(handSamples,t)?.hands||[];
+   draw(alignedSample(samples,t)?.landmarks||[]);
    updateTimelineSync();
   }catch(e){if(seekVersion===syncSeekVersion)state('Không tua được: '+e.message)}
  });
@@ -257,13 +257,21 @@ function drawTimelineCursor(){
  g.save();g.strokeStyle='#f7f3df';g.lineWidth=1.5;g.setLineDash([5,4]);g.beginPath();g.moveTo(x,0);g.lineTo(x,c.height);g.stroke();g.restore();
 }
 
+// Align independently sampled detectors by timestamp, not by array position.
+function alignedSample(frames,time,tolerance=.12){
+ if(!Array.isArray(frames)||!frames.length||!Number.isFinite(time))return null;
+ let best=null,delta=Infinity;
+ for(const frame of frames){const d=Math.abs(Number(frame?.time)-time);if(Number.isFinite(d)&&d<delta){best=frame;delta=d}}
+ return delta<=tolerance?best:null;
+}
 function inspectFrame(index){
  const count=Math.max(samples.length,faceSamples.length,handSamples.length);
  const pos=$('inspectPosition'),detail=$('inspectDetails');
  if(!count){pos.textContent='Chưa có mẫu';detail.textContent='Chưa có dữ liệu phân tích.';$('inspectPrev').disabled=true;$('inspectNext').disabled=true;return}
  const i=Math.max(0,Math.min(count-1,Math.trunc(Number(index)||0)));
- const poseFrame=samples[i],faceFrame=faceSamples[i],handFrame=handSamples[i];
- const time=Number(faceFrame?.time??poseFrame?.time??handFrame?.time??0);
+ const anchor=faceSamples[i]||samples[i]||handSamples[i];
+ const time=Number(anchor?.time??0);
+ const poseFrame=alignedSample(samples,time),faceFrame=alignedSample(faceSamples,time),handFrame=alignedSample(handSamples,time);
  const landmarks=poseFrame?.landmarks||[];
  if(!running){latestFace=faceFrame?.landmarks||[];latestHands=handFrame?.hands||[];draw(landmarks)}
  const ids={left_shoulder:11,right_shoulder:12,left_elbow:13,right_elbow:14,left_wrist:15,right_wrist:16,left_hip:23,right_hip:24,left_knee:25,right_knee:26,left_ankle:27,right_ankle:28};
