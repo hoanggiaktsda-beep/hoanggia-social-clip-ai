@@ -62,14 +62,22 @@ async function ensurePose(){
 }
 function seekTo(t){
  return new Promise((resolve,reject)=>{
-   const timeout=setTimeout(()=>{cleanup();reject(Error('Không thể tua video'))},10000);
-   function cleanup(){clearTimeout(timeout);video.removeEventListener('seeked',done);video.removeEventListener('error',failed)}
-   function done(){cleanup();resolve()}
-   function failed(){cleanup();reject(Error('Lỗi giải mã video'))}
-   video.addEventListener('seeked',done,{once:true});video.addEventListener('error',failed,{once:true});
-   video.currentTime=t;
+  if(!Number.isFinite(t)){reject(Error('Mốc thời gian không hợp lệ'));return}
+  const duration=Number(video.duration);
+  const target=Math.max(0,Number.isFinite(duration)?Math.min(t,Math.max(0,duration-.001)):t);
+  if(!video.seeking&&Math.abs(video.currentTime-target)<.001){resolve();return}
+  let settled=false;
+  const timeout=setTimeout(()=>finish(Error('Không thể tua video')),10000);
+  function cleanup(){clearTimeout(timeout);video.removeEventListener('seeked',done);video.removeEventListener('error',failed)}
+  function finish(error){if(settled)return;settled=true;cleanup();error?reject(error):resolve()}
+  function done(){finish()}
+  function failed(){finish(Error('Lỗi giải mã video'))}
+  video.addEventListener('seeked',done);
+  video.addEventListener('error',failed);
+  try{video.currentTime=target}catch(e){finish(e)}
  });
 }
+
 $('analyze').onclick=async()=>{
  if(running)return;
  if(!Number.isFinite(video.duration)||video.duration<=0){state('Chờ video tải xong metadata.');return}
