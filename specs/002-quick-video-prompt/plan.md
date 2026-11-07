@@ -1,0 +1,2 @@
+# Plan — Quick Video to Prompt V1.0
+Use existing browser MediaPipe sampled Pose results; no external AI API or backend. Derive coarse motion of wrists/shoulders/head from 2D landmarks and emit timeline chunks. Expose honest placeholders for scene, identity, clothing and camera where not detected. Add prominent prompt output with copy action and collapsible advanced panels. Preserve IndexedDB and JSON exports. Verify through Node tests and CI, then manual browser.
