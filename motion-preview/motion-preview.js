@@ -1,3 +1,4 @@
+import {describeFrames} from './vision-analysis.js';
 import {buildVideoPrompt} from './video-prompt.js';
 import {selectSample,smoothPose} from './motion-sampling.js';
 import {renderSkeleton} from './motion-reconstruction.js';
@@ -10,8 +11,9 @@ import {saveSession,loadSession,clearSession,saveReport,listSessions,selectSessi
 const $=id=>document.getElementById(id);
 const video=$('video'),canvas=$('overlay'),ctx=canvas.getContext('2d');
 const state=msg=>{$('state').textContent=msg};
+let visualDescription={};
 function showPrompt(report){
- const prompt=buildVideoPrompt(report);
+ const prompt=buildVideoPrompt(report,visualDescription);
  $('masterPrompt').value=prompt;
  $('copyPrompt').disabled=!prompt;
  $('promptStatus').textContent=prompt?'Đã tạo bản nháp từ dữ liệu chuyển động 2D. Kiểm tra các mục [ ] trước khi đưa vào Flow.':'Chưa có dữ liệu Pose để tạo prompt.';
@@ -93,7 +95,7 @@ $('file').onchange=async()=>{
  sourceName=file.name;activeFile=file;url=URL.createObjectURL(file);video.src=url;
  try{await saveSession(file);await renderSessions();$('sessionStatus').textContent='Đã lưu video trên thiết bị; có thể tải lại trang.'}catch(e){$('sessionStatus').textContent='Không lưu được video: '+e.message+' — hãy giữ bản gốc.'}
  samples=[];faceSamples=[];handSamples=[];latestFace=[];latestHands=[];selectedJoint=null;$('jointSelection').textContent='Chưa chọn điểm khớp.';timelineData=null;qualityData=null;reviewDecisions={};$('reviewList').replaceChildren();$('reviewExport').disabled=true;$('reviewStatus').textContent='Chưa có dữ liệu phân tích.';$('reviewReadiness').textContent='';$('transfer').disabled=true;$('reviewButtons').replaceChildren();$('qualityFlags').textContent='Chưa đánh giá chất lượng.';$('smooth').checked=false;$('frameSlider').disabled=true;$('facialSummary').textContent='Chưa có dữ liệu khuôn mặt.';$('json').disabled=true;$('analyze').disabled=false;
- $('masterPrompt').value='';$('copyPrompt').disabled=true;$('promptStatus').textContent='Đã chọn video. Nhấn Phân tích & tạo MASTER PROMPT.';
+ visualDescription={};$('masterPrompt').value='';$('copyPrompt').disabled=true;$('promptStatus').textContent='Đã chọn video. Nhấn Phân tích & tạo MASTER PROMPT.';
  state('Video đã chọn. Nhấn Phân tích video.');$('stats').textContent='Chưa phân tích.';
 };
 $('stop').onclick=()=>{running=false;video.pause();state('Đã dừng phân tích.')};
@@ -207,7 +209,17 @@ $('analyze').onclick=async()=>{
    window.motionReport=report;
    applyReport(report);
    saveReport(report).then(()=>{renderSessions();$('sessionStatus').textContent='Đã lưu video và kết quả phân tích trên thiết bị.'}).catch(e=>{$('sessionStatus').textContent='Không lưu được kết quả: '+e.message});
-   if(running){$('advanced').open=false;document.getElementById('quick').scrollIntoView({behavior:'smooth',block:'start'})}
+   if(running){
+     if($('visionKey').value.trim()){
+       if(!$('visionConsent').checked){$('promptStatus').textContent='Đã tạo prompt chuyển động. Cần đồng ý gửi 3 khung hình để tự nhận diện hình ảnh.'}
+       else{
+         $('promptStatus').textContent='Đang nhận diện trang phục, bối cảnh, camera và biểu cảm...';
+         try{visualDescription=await describeFrames(video,$('visionKey').value);showPrompt(report);$('promptStatus').textContent='Đã tạo prompt với phân tích hình ảnh Gemini. Kiểm tra nội dung trước khi dùng.'}
+         catch(error){$('promptStatus').textContent='Không nhận diện được hình ảnh: '+error.message+' · Vẫn có prompt chuyển động.'}
+       }
+     }
+     $('advanced').open=false;document.getElementById('quick').scrollIntoView({behavior:'smooth',block:'start'})
+   }
    state(running?'Phân tích hoàn tất. MASTER PROMPT đã sẵn sàng để kiểm tra.':'Đã dừng. Kết quả một phần có thể tải.');
  }catch(e){state('Không phân tích được: '+e.message)}
  finally{running=false;$('stop').disabled=true;$('analyze').disabled=false}
