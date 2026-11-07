@@ -45,6 +45,8 @@ export function buildVideoPrompt(report, visual={}, outputSeconds=10){
   timeline.push('• '+start.toFixed(1)+'–'+end.toFixed(1)+'s: '+(motions.length?motions.slice(0,5).join('; ')+'.'+describeNaturalMotion(segment):'Không đủ bằng chứng để mô tả chuyển động cụ thể; giữ chuyển động tự nhiên, không tự thêm hành động lớn.'));
  }
  const aspect='dọc 9:16';
+ const visionBeats=Array.isArray(visual.actions)?visual.actions.filter(a=>Number.isFinite(a?.start)&&Number.isFinite(a?.end)&&a.end>a.start).map(a=>({start:Math.max(0,Math.min(total,a.start/duration*total)),end:Math.max(0,Math.min(total,a.end/duration*total)),action:String(a.action||'').trim(),face:String(a.face||'').trim()})).filter(a=>a.action||a.face):[];
+ const actionTimeline=visionBeats.length?visionBeats.map(a=>'• '+a.start.toFixed(1)+'–'+a.end.toFixed(1)+'s: '+[a.action,a.face?'Nét mặt: '+a.face:''].filter(Boolean).join(' · ')):timeline;
  const safe=(value,fallback)=>typeof value==='string'&&value.trim()?value.trim():fallback;
  const detected=frames.filter(f=>f.pose_detected).length;
  return [
@@ -54,13 +56,13 @@ export function buildVideoPrompt(report, visual={}, outputSeconds=10){
  'TRANG PHỤC: '+safe(visual.wardrobe,'Chưa xác định được trang phục bằng hệ thống phân tích hình ảnh.') ,
  'BỐI CẢNH: '+safe(visual.scene,'Chưa xác định được bối cảnh bằng hệ thống phân tích hình ảnh.') ,
  'CAMERA: '+safe(visual.camera,'Chưa xác định được góc máy và chuyển động camera từ hình ảnh.') ,
- 'CHUYỂN ĐỘNG THEO TIMELINE (quan sát 2D tương đối, không phải nhận diện hành động):',
- ...timeline,
+ visionBeats.length?'CHUYỂN ĐỘNG VÀ BIỂU CẢM THEO TIMELINE (mô tả thị giác từ các khung hình):':'CHUYỂN ĐỘNG THEO TIMELINE (quan sát 2D tương đối, chưa nhận diện hành động):',
+ ...actionTimeline,
  'BIỂU CẢM: '+safe(visual.expression,'Chưa xác định được biểu cảm từ dữ liệu hiện có.') ,
- 'FACIAL PERFORMANCE: chuyển tiếp ánh mắt, mí mắt, cơ má, khóe môi và chuyển động đầu một cách liên tục, tinh tế; giữ nhịp chớp mắt tự nhiên khi phù hợp, không lặp máy móc. Không tự tạo lời nói, không chuyển khẩu hình thành đang thoại nếu không có bằng chứng.',
- 'MOTION NATURALNESS: các chuyển động đã mô tả phải có pha bắt đầu, tăng tốc, giảm tốc và kết thúc mềm; đầu–cổ–vai–thân phối hợp theo giải phẫu, tay đi theo quỹ đạo liên tục, không giật khớp hoặc đứng đông cứng giữa các mốc. Chuyển động phụ của tóc và vải chỉ xuất hiện tương ứng với chuyển động thực của cơ thể; không tự thêm hành động lớn.',
+ 'FACIAL PERFORMANCE: duy trì biến thiên ánh mắt, mí mắt, khóe môi và hướng đầu theo các mốc biểu cảm đã xác định; nối chuyển tiếp mềm, không giữ một biểu cảm cố định. Không tự tạo lời nói, không ép chớp mắt hoặc khẩu hình nếu không có bằng chứng.',
+ 'MOTION NATURALNESS: nối các hành động đã nhận diện bằng chuyển tiếp liên tục, tốc độ thay đổi mềm; đầu–cổ–vai–thân phối hợp tự nhiên. Không đứng đông cứng giữa các mốc; tóc và vải chỉ phản ứng với chuyển động cơ thể. Không tự thêm hành động lớn.',
  'ÂM THANH: STRICT SILENCE. Không nhạc, không thoại, không hiệu ứng âm thanh.',
  'RÀNG BUỘC: duy trì nhân dạng, trang phục, bối cảnh và góc máy xuyên suốt; chuyển động liền mạch, không biến dạng tay, mặt hoặc cơ thể; không tự thêm nhân vật/đạo cụ.',
- 'LƯU Ý: Các mục chưa xác định cần được phân tích hình ảnh bổ sung trước khi tạo video. Dữ liệu chuyển động 2D không chứng minh được góc máy hoặc trang phục.'
+ 'LƯU Ý: '+(visionBeats.length?'Timeline là suy luận từ các khung hình rời rạc, chưa đo được toàn bộ chuyển động liên tục.':'Chưa có nhận diện hành động bằng thị giác; mô tả điểm khớp 2D không đủ để tái tạo chính xác hành động và biểu cảm.')
  ].join('\n');
 }
