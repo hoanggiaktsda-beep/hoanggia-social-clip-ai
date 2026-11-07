@@ -23,6 +23,8 @@ jobs:
       - name: Validate standalone preview
         run: |
           node --check motion-preview/session-store.js
+          grep -q 'sessionList' motion-preview/index.html
+          grep -q 'selectSession' motion-preview/motion-preview.js
           node --check motion-preview/motion-preview.js
           node --check motion-preview/facial-metrics.js
           node motion-preview/tests/facial-metrics.test.mjs
