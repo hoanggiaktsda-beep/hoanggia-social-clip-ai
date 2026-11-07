@@ -182,16 +182,23 @@ $('frameSlider').addEventListener('input',async()=>{
  if(t===undefined)return;
  $('frameTime').textContent=t.toFixed(2)+'s';
  const seekVersion=++syncSeekVersion;
- try{video.pause();if(Math.abs(video.currentTime-t)>.025)await seekTo(t);
-   latestFace=faceSamples[i]?.landmarks||[];latestHands=handSamples[i]?.hands||[];
+ video.pause();
+ frameSeekQueue=frameSeekQueue.catch(()=>{}).then(async()=>{
+  if(seekVersion!==syncSeekVersion)return;
+  try{
+   if(Math.abs(video.currentTime-t)>.025)await seekTo(t);
    if(seekVersion!==syncSeekVersion)return;
+   latestFace=faceSamples[i]?.landmarks||[];
+   latestHands=handSamples[i]?.hands||[];
    draw(samples[i]?.landmarks||[]);
    updateTimelineSync();
- }catch(e){state('Không tua được: '+e.message)}
+  }catch(e){if(seekVersion===syncSeekVersion)state('Không tua được: '+e.message)}
+ });
 });
 
 
 let syncSeekVersion=0;
+let frameSeekQueue=Promise.resolve();
 function nearestFrameIndex(time){
  if(!faceSamples.length)return -1;
  let lo=0,hi=faceSamples.length-1;
