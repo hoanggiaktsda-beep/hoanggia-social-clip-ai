@@ -1,0 +1,32 @@
+name: Motion Analyzer CI
+on:
+  push:
+    branches: [feature/video-recreator-motion-v1]
+  pull_request:
+    paths: ['recreator/**', '.github/workflows/motion-analyzer-ci.yml']
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Compile and unit tests
+        run: |
+          python -m compileall -q recreator
+          python -m unittest discover -s recreator/tests -v
+  integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - run: pip install -r recreator/requirements.txt
+      - name: Generate synthetic video and analyze
+        run: |
+          ffmpeg -hide_banner -loglevel error -f lavfi -i testsrc2=s=160x90:r=10:d=2 -y /tmp/motion-test.mp4
+          python -m recreator.motion_analyzer /tmp/motion-test.mp4 --out /tmp/motion-result --sample-fps 5 --no-pose
+          python -c "import json,pathlib; p=pathlib.Path('/tmp/motion-result'); d=json.loads((p/'motion.json').read_text()); assert len(d['frames'])>=8; assert (p/'motion_overlay.mp4').stat().st_size>0; assert len(d['scenes'])>=1"
