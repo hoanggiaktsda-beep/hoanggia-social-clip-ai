@@ -29,3 +29,21 @@ const store=new Map();const storage={getItem:k=>store.get(k)||null,setItem:(k,v)
 assert.equal(saveReview(storage,report,decisions),true);
 assert.deepEqual(restoreReview(storage,report,result.items),decisions);
 assert.deepEqual(restoreReview(storage,{...report,source:'different.mp4'},result.items),{});
+
+const repeated={...report,motion_quality:{flags:[
+ {index:72,time:14.4,metric:'yaw_proxy',delta:.2538},
+ {index:73,time:14.4,metric:'yaw_proxy',delta:.2538},
+ {index:74,time:14.6,metric:'yaw_proxy',delta:.28},
+ {index:75,time:14.6,metric:'yaw_proxy',delta:.28},
+ {index:76,time:14.6,metric:'left_eye_open',delta:.31}
+]},hand_tracking:{frames:[
+ {time:9.4,hands:[{},{},{}]},
+ {time:9.4,hands:[{},{},{}]}
+]}};
+const unique=reviewItems(repeated).items;
+assert.equal(unique.length,4,'same displayed timestamp and metric should be reviewed once');
+assert.deepEqual(unique.map(x=>x.id),['hands-0','motion-0','motion-2','motion-4']);
+assert.equal(repeated.motion_quality.flags.length,5,'raw motion warnings must remain intact');
+const reviewed=reviewedPackage(repeated,Object.fromEntries(unique.map(i=>[i.id,'accepted'])));
+assert.equal(reviewed.manual_review.reviewed_count,4);
+console.log('Duplicate timestamp regression passed');
