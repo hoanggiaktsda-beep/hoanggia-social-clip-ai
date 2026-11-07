@@ -1,5 +1,6 @@
 import {buildTimeline} from './facial-metrics.js';
 import {qualityAnalysis} from './motion-quality.js';
+import {transferPackage,classifyChanges} from './transfer-package.js';
 const $=id=>document.getElementById(id);
 const video=$('video'),canvas=$('overlay'),ctx=canvas.getContext('2d');
 const state=msg=>{$('state').textContent=msg};
@@ -33,7 +34,7 @@ $('file').onchange=()=>{
  running=false;if(url)URL.revokeObjectURL(url);
  const file=$('file').files?.[0];if(!file)return;
  sourceName=file.name;url=URL.createObjectURL(file);video.src=url;
- samples=[];faceSamples=[];handSamples=[];latestFace=[];latestHands=[];timelineData=null;qualityData=null;$('qualityFlags').textContent='Chưa đánh giá chất lượng.';$('smooth').checked=false;$('frameSlider').disabled=true;$('facialSummary').textContent='Chưa có dữ liệu khuôn mặt.';$('json').disabled=true;$('analyze').disabled=false;
+ samples=[];faceSamples=[];handSamples=[];latestFace=[];latestHands=[];timelineData=null;qualityData=null;$('transfer').disabled=true;$('reviewButtons').replaceChildren();$('qualityFlags').textContent='Chưa đánh giá chất lượng.';$('smooth').checked=false;$('frameSlider').disabled=true;$('facialSummary').textContent='Chưa có dữ liệu khuôn mặt.';$('json').disabled=true;$('analyze').disabled=false;
  state('Video đã chọn. Nhấn Phân tích video.');$('stats').textContent='Chưa phân tích.';
 };
 $('stop').onclick=()=>{running=false;video.pause();state('Đã dừng phân tích.')};
@@ -123,6 +124,12 @@ $('analyze').onclick=async()=>{
    qualityData=qualityAnalysis(timelineData.metrics);
    renderTimeline(timelineData);
    $('qualityFlags').textContent='Cảnh báo biến thiên đột ngột: '+qualityData.flags.length+' · Khoảng thiếu dữ liệu: '+qualityData.missing_ranges.length+'\n'+qualityData.flags.slice(0,24).map(f=>f.time.toFixed(2)+'s · '+f.metric+' · Δ='+f.delta).join('\n');
+   const reviewed=classifyChanges(timelineData.metrics,qualityData.flags);
+   const reviewBox=$('reviewButtons');reviewBox.replaceChildren();
+   for(const flag of reviewed.slice(0,30)){
+     const btn=document.createElement('button');btn.type='button';btn.textContent=flag.time.toFixed(2)+'s · '+flag.metric+(flag.review_hint==='possible_single_frame_spike'?' · nghi nhiễu':' · cần xem');
+     btn.addEventListener('click',()=>{const slider=$('frameSlider');slider.value=String(flag.index);slider.dispatchEvent(new Event('input'))});reviewBox.appendChild(btn);
+   }
    $('frameSlider').max=Math.max(0,faceSamples.length-1);
    $('frameSlider').value='0';$('frameSlider').disabled=!faceSamples.length;
    $('facialSummary').textContent='Mẫu mặt hợp lệ: '+timelineData.valid_frames+'/'+faceSamples.length+' · Số bước nhảy đột ngột (ngưỡng tham khảo 0.25): '+Object.values(timelineData.summary).reduce((n,v)=>n+v.jump_count,0);
@@ -131,6 +138,7 @@ $('analyze').onclick=async()=>{
      sampling_target_fps:5,motion_quality:qualityData,facial_motion:timelineData,face_tracking:{detected_frames:faceDetected,total_frames:faceSamples.length,frames:faceSamples},hand_tracking:{detected_frames:handDetected,total_frames:handSamples.length,frames:handSamples},limb_tracking:limbStats,motion_summary:motionSummary,motion_timeseries:motionSeries,frames:samples,
      limitations:['Single-person pose only','Browser-based processing','No camera tracking','No AI generation']};
    window.motionReport=report;
+   $('transfer').disabled=!samples.length;
    $('stats').textContent=JSON.stringify({duration_seconds:+video.duration.toFixed(2),
      samples:samples.length,pose_detected:detected,
      detection_rate:samples.length?+(detected/samples.length).toFixed(3):0,
@@ -178,3 +186,13 @@ $('frameSlider').addEventListener('input',async()=>{
 });
 
 $('smooth').addEventListener('change',()=>{if(timelineData)renderTimeline(timelineData)});
+
+$('transfer').addEventListener('click',()=>{
+ if(!window.motionReport)return;
+ try{
+ const pkg=transferPackage(window.motionReport);
+ const blob=new Blob([JSON.stringify(pkg)],{type:'application/json'}),link=document.createElement('a');
+ link.href=URL.createObjectURL(blob);link.download='HOANGGIA-motion-transfer-v1.json';link.click();
+ setTimeout(()=>URL.revokeObjectURL(link.href),3000);
+ }catch(e){state('Không xuất được gói chuyển động: '+e.message)}
+});
