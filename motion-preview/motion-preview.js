@@ -22,7 +22,7 @@ $('quickAnalyze').addEventListener('click',()=>{
  if(!$('file').files?.length&&!activeFile){$('promptStatus').textContent='Vui lòng chọn video trước.';return}
  $('promptStatus').textContent='Đang phân tích video...';
  if($('analyze').disabled){$('promptStatus').textContent='Video đang tải hoặc chưa sẵn sàng để phân tích.';return}
- if($('visionKey').value.trim()&&!$('visionConsent').checked){$('aiSettings').open=true;$('promptStatus').textContent='Hãy tích đồng ý gửi 3 khung hình trong Cài đặt AI, hoặc xóa API key để chỉ phân tích chuyển động.';return}
+ if($('visionKey').value.trim()&&!$('visionConsent').checked){$('aiSettings').open=true;$('promptStatus').textContent='Hãy tích đồng ý gửi 9 khung hình trong Cài đặt AI, hoặc xóa API key để chỉ phân tích chuyển động.';return}
  $('analyze').click();
 });
 $('outputDuration').addEventListener('change',()=>{if(window.motionReport)showPrompt(window.motionReport)});
@@ -213,7 +213,7 @@ $('analyze').onclick=async()=>{
    saveReport(report).then(()=>{renderSessions();$('sessionStatus').textContent='Đã lưu video và kết quả phân tích trên thiết bị.'}).catch(e=>{$('sessionStatus').textContent='Không lưu được kết quả: '+e.message});
    if(running){
      if($('visionKey').value.trim()){
-       if(!$('visionConsent').checked){$('promptStatus').textContent='Đã tạo prompt chuyển động. Cần đồng ý gửi 3 khung hình để tự nhận diện hình ảnh.'}
+       if(!$('visionConsent').checked){$('promptStatus').textContent='Đã tạo prompt chuyển động. Cần đồng ý gửi 9 khung hình để tự nhận diện hình ảnh.'}
        else{
          $('promptStatus').textContent='Đang nhận diện trang phục, bối cảnh, camera và biểu cảm...';
          try{visualDescription=await describeFrames(video,$('visionKey').value);showPrompt(report);$('promptStatus').textContent='Đã tạo prompt với phân tích hình ảnh Gemini. Kiểm tra nội dung trước khi dùng.'}
