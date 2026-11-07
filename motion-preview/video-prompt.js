@@ -9,11 +9,13 @@ function movement(a,b,id){
  const vertical=Math.abs(dy)>=Math.abs(dx);
  return (name[id]||'khớp')+' '+(vertical?(dy>0?'dịch xuống':'dịch lên'):(dx>0?'dịch sang phải khung hình':'dịch sang trái khung hình'));
 }
-export function buildVideoPrompt(report, visual={}){
+export function buildVideoPrompt(report, visual={}, outputSeconds=10){
  const duration=Number(report?.video?.duration);
  const frames=Array.isArray(report?.frames)?report.frames.filter(f=>Number.isFinite(f?.time)).sort((a,b)=>a.time-b.time):[];
  if(!frames.length||!Number.isFinite(duration)||duration<=0)return '';
- const total=10,parts=5;
+ const requested=Number(outputSeconds);
+ const total=Number.isFinite(requested)?Math.max(5,Math.min(30,Math.round(requested))):10;
+ const parts=Math.ceil(total/2);
  const timeline=[];
  for(let i=0;i<parts;i++){
   const start=i*total/parts,end=(i+1)*total/parts;
@@ -28,7 +30,7 @@ export function buildVideoPrompt(report, visual={}){
  const detected=frames.filter(f=>f.pose_detected).length;
  return [
  'HOANGGIA AI — MASTER PROMPT VIDEO',
- 'Mục tiêu: tạo video 10 giây; khung hình '+aspect+'.',
+ 'Mục tiêu: tạo video '+total+' giây; khung hình '+aspect+'.',
  'NHÂN VẬT: [mô tả nhân vật / chọn Character ID trong Flow].',
  'TRANG PHỤC: '+safe(visual.wardrobe,'Chưa xác định được trang phục bằng hệ thống phân tích hình ảnh.') ,
  'BỐI CẢNH: '+safe(visual.scene,'Chưa xác định được bối cảnh bằng hệ thống phân tích hình ảnh.') ,
