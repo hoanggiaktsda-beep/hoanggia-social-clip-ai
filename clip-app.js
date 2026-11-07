@@ -23,7 +23,7 @@ function refresh(source){
  const w=shape[0],h=shape[1],fit=$('fit').value;
  const filter=fit==='crop'?'scale='+w+':'+h+':force_original_aspect_ratio=increase,crop='+w+':'+h+',setsar=1':'scale='+w+':'+h+':force_original_aspect_ratio=decrease,pad='+w+':'+h+':(ow-iw)/2:(oh-ih)/2,setsar=1';
  $('command').textContent='ffmpeg -ss '+a.toFixed(2)+' -i "input.mp4" -t '+Math.max(0,b-a).toFixed(2)+' -vf "'+filter+'" -c:v libx264 -crf 24 -preset ultrafast -threads 1 -filter_threads 1 -pix_fmt yuv420p -c:a aac -b:a 128k -movflags +faststart "output.mp4"';
- return ok;
+ showSegments();return ok;
 }
 function buttons(){
  $('platforms').replaceChildren();
@@ -33,7 +33,7 @@ function unlink(a){if(a.href&&a.href.startsWith('blob:'))URL.revokeObjectURL(a.h
 $('file').onchange=()=>{
  const f=$('file').files?.[0];if(!f)return;preview=false;video.pause();if(url)URL.revokeObjectURL(url);if(thumbUrl)URL.revokeObjectURL(thumbUrl);
  ['download','thumbnailDownload','reportDownload'].forEach(id=>unlink($(id)));
- srcFile=f;url=URL.createObjectURL(f);duration=0;video.hidden=false;$('placeholder').hidden=true;video.src=url;video.load();
+ segments=[];showSegments();srcFile=f;url=URL.createObjectURL(f);duration=0;video.hidden=false;$('placeholder').hidden=true;video.src=url;video.load();
  $('meta').textContent=f.name+' · '+(f.size/1048576).toFixed(1)+' MB';status('Đang đọc metadata video…');$('thumbs').replaceChildren();refresh();
 };
 video.onloadedmetadata=()=>{duration=Number.isFinite(video.duration)?video.duration:0;start.value=0;end.value=Math.min(duration,P[platform][2]).toFixed(2);refresh();status(duration?'Sẵn sàng xem trước.':'Không đọc được thời lượng.');makeThumbs()};
@@ -76,6 +76,52 @@ $('render').onclick=async()=>{
  }catch(e){status('Chưa xuất được: '+e.message)}
  finally{refresh()}
 };
+
+let segments=[];
+function showSegments(){
+ const el=$('segmentList');el.replaceChildren();
+ if(!segments.length)el.textContent='Chưa thêm đoạn nào.';
+ segments.forEach((p,i)=>{
+   const row=document.createElement('div');row.style.cssText='display:flex;justify-content:space-between;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid #415448';
+   const label=document.createElement('span');label.textContent=(i+1)+'. '+p.start.toFixed(2)+'s → '+p.end.toFixed(2)+'s';
+   const remove=document.createElement('button');remove.type='button';remove.className='btn';remove.textContent='Xóa';
+   remove.onclick=()=>{segments.splice(i,1);showSegments()};row.append(label,remove);el.append(row);
+ });
+ $('addSegment').disabled=!valid()||segments.length>=8;
+ $('clearSegments').disabled=!segments.length;
+ $('montage').disabled=segments.length<2||!$('api').value.trim();
+}
+$('addSegment').onclick=()=>{if(!valid()||segments.length>=8)return;const [a,b]=bounds();segments.push({start:a,end:b});showSegments();status('Đã thêm đoạn '+segments.length+'.')};
+$('clearSegments').onclick=()=>{segments=[];showSegments();status('Đã xóa danh sách đoạn cắt.')};
+$('montage').onclick=async()=>{
+ if(segments.length<2)return;
+ const total=segments.reduce((sum,p)=>sum+p.end-p.start,0);
+ const limit=$('quality').value==='hd'?15:Math.min(60,P[platform][2]);
+ if(total>limit){status('Tổng thời lượng '+total.toFixed(1)+'s vượt giới hạn '+limit+'s.');return}
+ const base=$('api').value.trim().replace(/\/+$/,'');
+ const token=$('token').value.trim();
+ if(!token){status('Thiếu khóa APP_ACCESS_TOKEN trong mục ENGINE.');return}
+ const auth={'X-App-Token':token};$('montage').disabled=true;
+ try{
+   status('Đang tải video nguồn để ghép…');
+   const fd=new FormData();fd.append('file',srcFile);
+   const upload=await fetch(base+'/api/media',{method:'POST',headers:auth,body:fd});
+   if(!upload.ok)throw Error('Upload HTTP '+upload.status);
+   const media=await upload.json();status('FFmpeg đang ghép '+segments.length+' đoạn…');
+   const body={media_id:media.media_id,segments,platform,aspect:$('aspect').value,fit:$('fit').value,quality:$('quality').value};
+   const response=await fetch(base+'/api/montage',{method:'POST',headers:{...auth,'Content-Type':'application/json'},body:JSON.stringify(body)});
+   if(!response.ok)throw Error('Ghép video HTTP '+response.status+': '+(await response.text()).slice(0,180));
+   const result=await response.json();$('json').textContent=JSON.stringify(result,null,2);
+   const prefix=base+'/api/clips/'+media.media_id+'/'+result.clip_id+'/';
+   for(const [kind,id,name] of [['mp4','download','HOANGGIA-montage.mp4'],['jpg','thumbnailDownload','HOANGGIA-montage.jpg']]){
+     const res=await fetch(prefix+kind,{headers:auth});if(!res.ok)throw Error('Tải kết quả HTTP '+res.status);
+     const link=$(id);unlink(link);link.href=URL.createObjectURL(await res.blob());link.download=name;link.hidden=false;link.textContent='↓ Tải '+(kind==='mp4'?'video ghép MP4':'thumbnail');
+   }
+   status('Đã ghép xong '+segments.length+' đoạn. Hãy tải MP4 để kiểm tra.');
+ }catch(e){status('Chưa ghép được: '+e.message)}
+ finally{showSegments()}
+};
+
 window.addEventListener('pagehide',()=>{thumbSeq++;if(url)URL.revokeObjectURL(url)});
 buttons();refresh();
 // Auto-connect only when UI and API share the same origin.
