@@ -3,12 +3,13 @@ import {qualityAnalysis} from './motion-quality.js';
 import {transferPackage,classifyChanges} from './transfer-package.js';
 import {reviewItems,reviewedPackage} from './quality-review.js';
 import {restoreReview,saveReview,handAnomalies} from './hand-quality.js';
+import {saveSession,loadSession,clearSession,saveReport} from './session-store.js';
 const $=id=>document.getElementById(id);
 const video=$('video'),canvas=$('overlay'),ctx=canvas.getContext('2d');
 const state=msg=>{$('state').textContent=msg};
 let timelineData=null,qualityData=null;
 let reviewDecisions={};
-let url=null,running=false,samples=[],pose=null,face=null,hands=null,sourceName='',faceSamples=[],handSamples=[],latestFace=[],latestHands=[];
+let activeFile=null,url=null,running=false,samples=[],pose=null,face=null,hands=null,sourceName='',faceSamples=[],handSamples=[],latestFace=[],latestHands=[];
 const EDGES=[[11,12],[11,13],[13,15],[12,14],[14,16],[11,23],[12,24],[23,24],[23,25],[25,27],[24,26],[26,28]];
 function syncOverlay(){
  const rect=video.getBoundingClientRect(),parent=$('viewer').getBoundingClientRect();
@@ -33,10 +34,11 @@ function drawExtra(){
  if($('showFace').checked){ctx.fillStyle='#7be8ff';for(const p of latestFace){if(p.x<0||p.x>1||p.y<0||p.y>1)continue;ctx.fillRect(p.x*w-1,p.y*h-1,2,2)}}
  if($('showHands').checked){ctx.fillStyle='#ff8ac2';for(const hand of latestHands){for(const p of hand.landmarks){if(p.x<0||p.x>1||p.y<0||p.y>1)continue;ctx.beginPath();ctx.arc(p.x*w,p.y*h,2.5,0,Math.PI*2);ctx.fill()}}}
 }
-$('file').onchange=()=>{
+$('file').onchange=async()=>{
  running=false;if(url)URL.revokeObjectURL(url);
  const file=$('file').files?.[0];if(!file)return;
- sourceName=file.name;url=URL.createObjectURL(file);video.src=url;
+ sourceName=file.name;activeFile=file;url=URL.createObjectURL(file);video.src=url;
+ try{await saveSession(file);$('sessionStatus').textContent='Đã lưu video trên thiết bị; có thể tải lại trang.'}catch(e){$('sessionStatus').textContent='Không lưu được video: '+e.message+' — hãy giữ bản gốc.'}
  samples=[];faceSamples=[];handSamples=[];latestFace=[];latestHands=[];timelineData=null;qualityData=null;reviewDecisions={};$('reviewList').replaceChildren();$('reviewExport').disabled=true;$('reviewStatus').textContent='Chưa có dữ liệu phân tích.';$('reviewReadiness').textContent='';$('transfer').disabled=true;$('reviewButtons').replaceChildren();$('qualityFlags').textContent='Chưa đánh giá chất lượng.';$('smooth').checked=false;$('frameSlider').disabled=true;$('facialSummary').textContent='Chưa có dữ liệu khuôn mặt.';$('json').disabled=true;$('analyze').disabled=false;
  state('Video đã chọn. Nhấn Phân tích video.');$('stats').textContent='Chưa phân tích.';
 };
@@ -141,13 +143,8 @@ $('analyze').onclick=async()=>{
      sampling_target_fps:5,motion_quality:qualityData,facial_motion:timelineData,face_tracking:{detected_frames:faceDetected,total_frames:faceSamples.length,frames:faceSamples},hand_tracking:{detected_frames:handDetected,total_frames:handSamples.length,frames:handSamples},limb_tracking:limbStats,motion_summary:motionSummary,motion_timeseries:motionSeries,frames:samples,
      limitations:['Single-person pose only','Browser-based processing','No camera tracking','No AI generation']};
    window.motionReport=report;
-   reviewDecisions=restoreReview(localStorage,report,reviewItems(report).items);renderQualityReview();
-   $('transfer').disabled=!samples.length;
-   $('stats').textContent=JSON.stringify({duration_seconds:+video.duration.toFixed(2),
-     samples:samples.length,pose_detected:detected,
-     detection_rate:samples.length?+(detected/samples.length).toFixed(3):0,
-     dimensions:video.videoWidth+'×'+video.videoHeight},null,2);
-   $('json').disabled=!samples.length;
+   applyReport(report);
+   saveReport(report).then(()=>{$('sessionStatus').textContent='Đã lưu video và kết quả phân tích trên thiết bị.'}).catch(e=>{$('sessionStatus').textContent='Không lưu được kết quả: '+e.message});
    state(running?'Phân tích hoàn tất. Có thể tải motion.json.':'Đã dừng. Kết quả một phần có thể tải.');
  }catch(e){state('Không phân tích được: '+e.message)}
  finally{running=false;$('stop').disabled=true;$('analyze').disabled=false}
@@ -200,6 +197,54 @@ $('transfer').addEventListener('click',()=>{
  setTimeout(()=>URL.revokeObjectURL(link.href),3000);
  }catch(e){state('Không xuất được gói chuyển động: '+e.message)}
 });
+
+
+function applyReport(report){
+ window.motionReport=report;
+ samples=report.frames||[];
+ faceSamples=report.face_tracking?.frames||[];
+ handSamples=report.hand_tracking?.frames||[];
+ timelineData=report.facial_motion||buildTimeline(faceSamples);
+ qualityData=report.motion_quality||qualityAnalysis(timelineData.metrics);
+ reviewDecisions=restoreReview(localStorage,report,reviewItems(report).items);
+ renderTimeline(timelineData);
+ $('frameSlider').max=Math.max(0,faceSamples.length-1);
+ $('frameSlider').value='0';$('frameSlider').disabled=!faceSamples.length;
+ const flags=qualityData.flags||[];
+ $('qualityFlags').textContent='Cảnh báo biến thiên đột ngột: '+flags.length+' · Khoảng thiếu dữ liệu: '+(qualityData.missing_ranges||[]).length+'\\n'+flags.slice(0,24).map(f=>Number(f.time).toFixed(2)+'s · '+f.metric+' · Δ='+f.delta).join('\\n');
+ const reviewBox=$('reviewButtons');reviewBox.replaceChildren();
+ for(const flag of classifyChanges(timelineData.metrics,flags).slice(0,30)){
+  const btn=document.createElement('button');btn.type='button';btn.textContent=Number(flag.time).toFixed(2)+'s · '+flag.metric;
+  btn.onclick=()=>{const slider=$('frameSlider');slider.value=String(flag.index);slider.dispatchEvent(new Event('input'))};reviewBox.appendChild(btn);
+ }
+ $('facialSummary').textContent='Mẫu mặt hợp lệ: '+timelineData.valid_frames+'/'+faceSamples.length+' · Số cảnh báo: '+flags.length;
+ const faceDetected=report.face_tracking?.detected_frames??faceSamples.filter(f=>f.detected).length;
+ const handDetected=report.hand_tracking?.detected_frames??handSamples.filter(f=>(f.hands||[]).length).length;
+ $('faceHandMetrics').textContent='Khuôn mặt: '+faceDetected+'/'+faceSamples.length+' mẫu · Bàn tay: '+handDetected+'/'+handSamples.length+' mẫu.';
+ const names={left_arm:'Tay trái',right_arm:'Tay phải',left_leg:'Chân trái',right_leg:'Chân phải'};
+ $('limbMetrics').textContent=Object.entries(report.limb_tracking||{}).map(([key,v])=>names[key]+': '+(v.tracking_rate<.05?'Không đủ dữ liệu':Math.round(v.tracking_rate*100)+'% khung hình · tin cậy '+v.mean_visibility)).join('\\n');
+ const detected=samples.filter(x=>x.pose_detected).length;
+ $('stats').textContent=JSON.stringify({duration_seconds:+Number(report.video.duration).toFixed(2),samples:samples.length,pose_detected:detected,detection_rate:samples.length?+(detected/samples.length).toFixed(3):0,dimensions:report.video.width+'×'+report.video.height},null,2);
+ $('json').disabled=!samples.length;$('transfer').disabled=!samples.length;
+ renderQualityReview();
+}
+async function recoverSession(){
+ try{
+  const saved=await loadSession();if(!saved?.file)return;
+  activeFile=new File([saved.file],saved.filename,{type:saved.type});sourceName=saved.filename;
+  if(url)URL.revokeObjectURL(url);url=URL.createObjectURL(activeFile);video.src=url;
+  $('analyze').disabled=false;
+  if(saved.report){applyReport(saved.report);state('Đã khôi phục video và kết quả phân tích từ phiên trước.');}
+  else state('Đã khôi phục video nguồn. Có thể phân tích lại.');
+  $('sessionStatus').textContent='Phiên được lưu trên thiết bị · '+(saved.size/1048576).toFixed(1)+' MB · '+saved.updated_at;
+ }catch(e){$('sessionStatus').textContent='Không khôi phục được phiên: '+e.message}
+}
+$('clearSession').onclick=async()=>{
+ if(!confirm('Xóa video và kết quả phân tích đã lưu trên thiết bị này?'))return;
+ try{await clearSession();$('sessionStatus').textContent='Đã xóa phiên đã lưu. Tải lại trang để bắt đầu mới.'}
+ catch(e){$('sessionStatus').textContent='Không xóa được phiên: '+e.message}
+};
+recoverSession();
 
 function renderQualityReview(){
  const report=window.motionReport;if(!report)return;
