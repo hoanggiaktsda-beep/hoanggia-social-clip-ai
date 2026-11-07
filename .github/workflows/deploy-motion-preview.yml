@@ -1,0 +1,38 @@
+name: Deploy Motion Analyzer Preview
+on:
+  push:
+    branches: [feature/video-recreator-motion-v1]
+    paths:
+      - 'motion-preview/**'
+      - 'assets/logo.svg'
+      - '.github/workflows/deploy-motion-preview.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: motion-preview-pages
+  cancel-in-progress: true
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare static site
+        run: |
+          mkdir -p _site/motion-preview _site/assets
+          cp -a motion-preview/. _site/motion-preview/
+          cp assets/logo.svg _site/assets/logo.svg
+          printf '%s\n' '<!doctype html><html lang="vi"><meta charset="utf-8"><meta http-equiv="refresh" content="0;url=motion-preview/"><title>HOANGGIA Motion Analyzer</title><a href="motion-preview/">Mở Motion Analyzer</a></html>' > _site/index.html
+          touch _site/.nojekyll
+          test -s _site/motion-preview/index.html
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: deployment
+        uses: actions/deploy-pages@v4
