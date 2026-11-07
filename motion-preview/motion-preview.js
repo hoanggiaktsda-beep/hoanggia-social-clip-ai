@@ -19,16 +19,49 @@ function syncOverlay(){
 window.addEventListener('resize',syncOverlay);
 video.addEventListener('loadedmetadata',syncOverlay);
 function visible(p){return !!p&&p.visibility>=.6&&p.x>=0&&p.x<=1&&p.y>=0&&p.y<=1}
+const JOINT_NAMES={11:'Vai trái',12:'Vai phải',13:'Khuỷu trái',14:'Khuỷu phải',15:'Cổ tay trái',16:'Cổ tay phải',23:'Hông trái',24:'Hông phải',25:'Gối trái',26:'Gối phải',27:'Cổ chân trái',28:'Cổ chân phải'};
+let displayedPose=[],selectedJoint=null;
+function jointConfidence(p){return Number.isFinite(Number(p?.visibility))?Number(p.visibility):0}
+function jointColor(p){
+ if(!p||p.x<0||p.x>1||p.y<0||p.y>1)return '#ff6976';
+ return jointConfidence(p)>=.8?'#54e6a1':jointConfidence(p)>=.6?'#ffd078':'#ff6976';
+}
 function draw(landmarks){
  syncOverlay();
  const w=canvas.width=video.videoWidth||640,h=canvas.height=video.videoHeight||360;
  ctx.clearRect(0,0,w,h);
- if(!$('show').checked||!landmarks){drawExtra();return}
+ displayedPose=Array.isArray(landmarks)?landmarks:[];
+ if(!$('show').checked||!displayedPose.length){drawExtra();return}
+ const colorized=$('jointColors').checked;
  ctx.lineWidth=Math.max(2,w/320);ctx.strokeStyle='#e9bb68';ctx.fillStyle='#66edbc';
- for(const [a,b] of EDGES){const p=landmarks[a],q=landmarks[b];if(visible(p)&&visible(q)){ctx.beginPath();ctx.moveTo(p.x*w,p.y*h);ctx.lineTo(q.x*w,q.y*h);ctx.stroke()}}
- for(const p of landmarks){if(!visible(p))continue;ctx.beginPath();ctx.arc(p.x*w,p.y*h,Math.max(2,w/320),0,Math.PI*2);ctx.fill()}
+ for(const [a,b] of EDGES){const p=displayedPose[a],q=displayedPose[b];if(visible(p)&&visible(q)){ctx.beginPath();ctx.moveTo(p.x*w,p.y*h);ctx.lineTo(q.x*w,q.y*h);ctx.stroke()}}
+ displayedPose.forEach((p,id)=>{
+  if(!p||!Number.isFinite(p.x)||!Number.isFinite(p.y))return;
+  if(p.x<0||p.x>1||p.y<0||p.y>1)return;
+  if(!colorized&&!visible(p))return;
+  const x=p.x*w,y=p.y*h,r=Math.max(3,w/240);
+  ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);
+  if(colorized&&!visible(p)){ctx.strokeStyle='#ff6976';ctx.lineWidth=Math.max(2,w/400);ctx.stroke();ctx.beginPath();ctx.moveTo(x-r,y-r);ctx.lineTo(x+r,y+r);ctx.moveTo(x+r,y-r);ctx.lineTo(x-r,y+r);ctx.stroke()}
+  else{ctx.fillStyle=colorized?jointColor(p):'#66edbc';ctx.fill()}
+  if(selectedJoint===id){ctx.beginPath();ctx.arc(x,y,r+Math.max(3,w/200),0,Math.PI*2);ctx.strokeStyle='#ffffff';ctx.lineWidth=2;ctx.stroke()}
+ });
  drawExtra();
 }
+canvas.addEventListener('click',event=>{
+ if(!$('show').checked||!displayedPose.length)return;
+ const rect=canvas.getBoundingClientRect(),x=(event.clientX-rect.left)/rect.width,y=(event.clientY-rect.top)/rect.height;
+ let best=-1,distance=Infinity;
+ displayedPose.forEach((p,id)=>{
+  if(!p||!Number.isFinite(p.x)||!Number.isFinite(p.y)||p.x<0||p.x>1||p.y<0||p.y>1)return;
+  const d=Math.hypot((p.x-x)*rect.width,(p.y-y)*rect.height);
+  if(d<distance){best=id;distance=d}
+ });
+ if(best<0||distance>Math.max(16,rect.width*.025))return;
+ selectedJoint=best;const p=displayedPose[best],confidence=jointConfidence(p);
+ $('jointSelection').textContent=(JOINT_NAMES[best]||'Điểm khớp '+best)+' (#'+best+') · x='+p.x.toFixed(4)+' · y='+p.y.toFixed(4)+' · visibility='+confidence.toFixed(3)+' · '+(visible(p)?'Được phát hiện rõ':'Độ tin cậy thấp hoặc ngoài khung (không khẳng định bị che khuất)');
+ draw(displayedPose);
+});
+$('jointColors').addEventListener('change',()=>draw(displayedPose));
 function drawExtra(){
  const w=canvas.width,h=canvas.height;
  if($('showFace').checked){ctx.fillStyle='#7be8ff';for(const p of latestFace){if(p.x<0||p.x>1||p.y<0||p.y>1)continue;ctx.fillRect(p.x*w-1,p.y*h-1,2,2)}}
@@ -39,7 +72,7 @@ $('file').onchange=async()=>{
  const file=$('file').files?.[0];if(!file)return;
  sourceName=file.name;activeFile=file;url=URL.createObjectURL(file);video.src=url;
  try{await saveSession(file);await renderSessions();$('sessionStatus').textContent='Đã lưu video trên thiết bị; có thể tải lại trang.'}catch(e){$('sessionStatus').textContent='Không lưu được video: '+e.message+' — hãy giữ bản gốc.'}
- samples=[];faceSamples=[];handSamples=[];latestFace=[];latestHands=[];timelineData=null;qualityData=null;reviewDecisions={};$('reviewList').replaceChildren();$('reviewExport').disabled=true;$('reviewStatus').textContent='Chưa có dữ liệu phân tích.';$('reviewReadiness').textContent='';$('transfer').disabled=true;$('reviewButtons').replaceChildren();$('qualityFlags').textContent='Chưa đánh giá chất lượng.';$('smooth').checked=false;$('frameSlider').disabled=true;$('facialSummary').textContent='Chưa có dữ liệu khuôn mặt.';$('json').disabled=true;$('analyze').disabled=false;
+ samples=[];faceSamples=[];handSamples=[];latestFace=[];latestHands=[];selectedJoint=null;$('jointSelection').textContent='Chưa chọn điểm khớp.';timelineData=null;qualityData=null;reviewDecisions={};$('reviewList').replaceChildren();$('reviewExport').disabled=true;$('reviewStatus').textContent='Chưa có dữ liệu phân tích.';$('reviewReadiness').textContent='';$('transfer').disabled=true;$('reviewButtons').replaceChildren();$('qualityFlags').textContent='Chưa đánh giá chất lượng.';$('smooth').checked=false;$('frameSlider').disabled=true;$('facialSummary').textContent='Chưa có dữ liệu khuôn mặt.';$('json').disabled=true;$('analyze').disabled=false;
  state('Video đã chọn. Nhấn Phân tích video.');$('stats').textContent='Chưa phân tích.';
 };
 $('stop').onclick=()=>{running=false;video.pause();state('Đã dừng phân tích.')};
@@ -229,6 +262,7 @@ function inspectFrame(index){
  const poseFrame=samples[i],faceFrame=faceSamples[i],handFrame=handSamples[i];
  const time=Number(faceFrame?.time??poseFrame?.time??handFrame?.time??0);
  const landmarks=poseFrame?.landmarks||[];
+ if(!running){latestFace=faceFrame?.landmarks||[];latestHands=handFrame?.hands||[];draw(landmarks)}
  const ids={left_shoulder:11,right_shoulder:12,left_elbow:13,right_elbow:14,left_wrist:15,right_wrist:16,left_hip:23,right_hip:24,left_knee:25,right_knee:26,left_ankle:27,right_ankle:28};
  const joints=Object.entries(ids).map(([name,id])=>{
   const p=landmarks[id];return name+': '+(p?'visibility '+Number(p.visibility??0).toFixed(3)+(visible(p)?' · hợp lệ':' · thiếu/che khuất'):'không có dữ liệu');
