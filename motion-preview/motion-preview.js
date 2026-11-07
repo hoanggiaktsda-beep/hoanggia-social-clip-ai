@@ -20,6 +20,7 @@ $('quickAnalyze').addEventListener('click',()=>{
  if(!$('file').files?.length&&!activeFile){$('promptStatus').textContent='Vui lòng chọn video trước.';return}
  $('advanced').open=true;
  $('promptStatus').textContent='Đang phân tích video...';
+ if($('analyze').disabled){$('promptStatus').textContent='Video đang tải hoặc chưa sẵn sàng để phân tích.';return}
  $('analyze').click();
 });
 $('copyPrompt').addEventListener('click',async()=>{
@@ -93,6 +94,7 @@ $('file').onchange=async()=>{
  sourceName=file.name;activeFile=file;url=URL.createObjectURL(file);video.src=url;
  try{await saveSession(file);await renderSessions();$('sessionStatus').textContent='Đã lưu video trên thiết bị; có thể tải lại trang.'}catch(e){$('sessionStatus').textContent='Không lưu được video: '+e.message+' — hãy giữ bản gốc.'}
  samples=[];faceSamples=[];handSamples=[];latestFace=[];latestHands=[];selectedJoint=null;$('jointSelection').textContent='Chưa chọn điểm khớp.';timelineData=null;qualityData=null;reviewDecisions={};$('reviewList').replaceChildren();$('reviewExport').disabled=true;$('reviewStatus').textContent='Chưa có dữ liệu phân tích.';$('reviewReadiness').textContent='';$('transfer').disabled=true;$('reviewButtons').replaceChildren();$('qualityFlags').textContent='Chưa đánh giá chất lượng.';$('smooth').checked=false;$('frameSlider').disabled=true;$('facialSummary').textContent='Chưa có dữ liệu khuôn mặt.';$('json').disabled=true;$('analyze').disabled=false;
+ $('masterPrompt').value='';$('copyPrompt').disabled=true;$('promptStatus').textContent='Đã chọn video. Nhấn Phân tích & tạo MASTER PROMPT.';
  state('Video đã chọn. Nhấn Phân tích video.');$('stats').textContent='Chưa phân tích.';
 };
 $('stop').onclick=()=>{running=false;video.pause();state('Đã dừng phân tích.')};
@@ -205,9 +207,9 @@ $('analyze').onclick=async()=>{
      limitations:['Single-person pose only','Browser-based processing','No camera tracking','No AI generation']};
    window.motionReport=report;
    applyReport(report);
-   showPrompt(report);
    saveReport(report).then(()=>{renderSessions();$('sessionStatus').textContent='Đã lưu video và kết quả phân tích trên thiết bị.'}).catch(e=>{$('sessionStatus').textContent='Không lưu được kết quả: '+e.message});
-   state(running?'Phân tích hoàn tất. Có thể tải motion.json.':'Đã dừng. Kết quả một phần có thể tải.');
+   if(running){$('advanced').open=false;document.getElementById('quick').scrollIntoView({behavior:'smooth',block:'start'})}
+   state(running?'Phân tích hoàn tất. MASTER PROMPT đã sẵn sàng để kiểm tra.':'Đã dừng. Kết quả một phần có thể tải.');
  }catch(e){state('Không phân tích được: '+e.message)}
  finally{running=false;$('stop').disabled=true;$('analyze').disabled=false}
 };
@@ -363,6 +365,7 @@ $('transfer').addEventListener('click',()=>{
 
 function applyReport(report){
  window.motionReport=report;
+ showPrompt(report);
  samples=report.frames||[];
  faceSamples=report.face_tracking?.frames||[];
  handSamples=report.hand_tracking?.frames||[];
