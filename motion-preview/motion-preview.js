@@ -174,16 +174,57 @@ function renderTimeline(data){
    g.stroke();
  }
  g.fillStyle='#e9eee9';g.font='13px system-ui';g.fillText('Vàng: miệng · Xanh: mắt trái · Hồng: mắt phải · Lục: lệch đầu 2D',12,18);
+ drawTimelineCursor();
 }
 $('frameSlider').addEventListener('input',async()=>{
  if(running||!faceSamples.length)return;
  const i=Number($('frameSlider').value),t=faceSamples[i]?.time;
  if(t===undefined)return;
  $('frameTime').textContent=t.toFixed(2)+'s';
+ const seekVersion=++syncSeekVersion;
  try{video.pause();if(Math.abs(video.currentTime-t)>.025)await seekTo(t);
    latestFace=faceSamples[i]?.landmarks||[];latestHands=handSamples[i]?.hands||[];
+   if(seekVersion!==syncSeekVersion)return;
    draw(samples[i]?.landmarks||[]);
+   updateTimelineSync();
  }catch(e){state('Không tua được: '+e.message)}
+});
+
+
+let syncSeekVersion=0;
+function nearestFrameIndex(time){
+ if(!faceSamples.length)return -1;
+ let lo=0,hi=faceSamples.length-1;
+ while(lo<hi){const mid=(lo+hi)>>1;if(Number(faceSamples[mid].time)<time)lo=mid+1;else hi=mid}
+ if(lo>0&&Math.abs(Number(faceSamples[lo-1].time)-time)<=Math.abs(Number(faceSamples[lo].time)-time))return lo-1;
+ return lo;
+}
+function drawTimelineCursor(){
+ if(!timelineData||!faceSamples.length)return;
+ const c=$('timeline'),g=c.getContext('2d'),duration=Number(video.duration)||Number(faceSamples.at(-1)?.time)||1;
+ const x=Math.max(0,Math.min(c.width,c.width*(Number(video.currentTime)||0)/duration));
+ g.save();g.strokeStyle='#f7f3df';g.lineWidth=1.5;g.setLineDash([5,4]);g.beginPath();g.moveTo(x,0);g.lineTo(x,c.height);g.stroke();g.restore();
+}
+function updateTimelineSync(){
+ if(!faceSamples.length||running)return;
+ const index=nearestFrameIndex(Number(video.currentTime)||0);
+ if(index<0)return;
+ $('frameSlider').value=String(index);
+ $('frameTime').textContent=(Number(video.currentTime)||0).toFixed(2)+'s';
+ $('syncStatus').textContent='Đang xem '+(Number(video.currentTime)||0).toFixed(2)+'s · Mẫu '+(index+1)+'/'+faceSamples.length;
+ if(timelineData)renderTimeline(timelineData);
+}
+video.addEventListener('timeupdate',updateTimelineSync);
+video.addEventListener('seeked',updateTimelineSync);
+$('timeline').addEventListener('click',event=>{
+ if(running||!faceSamples.length||!Number.isFinite(video.duration))return;
+ const rect=$('timeline').getBoundingClientRect();
+ const fraction=Math.max(0,Math.min(1,(event.clientX-rect.left)/Math.max(1,rect.width)));
+ const target=Math.min(Math.max(0,video.duration-.02),fraction*video.duration);
+ const index=nearestFrameIndex(target);
+ if(index<0)return;
+ $('frameSlider').value=String(index);
+ $('frameSlider').dispatchEvent(new Event('input'));
 });
 
 $('smooth').addEventListener('change',()=>{if(timelineData)renderTimeline(timelineData)});
@@ -208,6 +249,7 @@ function applyReport(report){
  qualityData=report.motion_quality||qualityAnalysis(timelineData.metrics);
  reviewDecisions=restoreReview(localStorage,report,reviewItems(report).items);
  renderTimeline(timelineData);
+ $('syncStatus').textContent='Đã nạp dữ liệu · Bấm biểu đồ hoặc kéo thanh tua để xem khung hình.';
  $('frameSlider').max=Math.max(0,faceSamples.length-1);
  $('frameSlider').value='0';$('frameSlider').disabled=!faceSamples.length;
  const flags=qualityData.flags||[];
