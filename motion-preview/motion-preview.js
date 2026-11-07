@@ -2,6 +2,7 @@ import {buildTimeline} from './facial-metrics.js';
 import {qualityAnalysis} from './motion-quality.js';
 import {transferPackage,classifyChanges} from './transfer-package.js';
 import {reviewItems,reviewedPackage} from './quality-review.js';
+import {restoreReview,saveReview,handAnomalies} from './hand-quality.js';
 const $=id=>document.getElementById(id);
 const video=$('video'),canvas=$('overlay'),ctx=canvas.getContext('2d');
 const state=msg=>{$('state').textContent=msg};
@@ -140,7 +141,7 @@ $('analyze').onclick=async()=>{
      sampling_target_fps:5,motion_quality:qualityData,facial_motion:timelineData,face_tracking:{detected_frames:faceDetected,total_frames:faceSamples.length,frames:faceSamples},hand_tracking:{detected_frames:handDetected,total_frames:handSamples.length,frames:handSamples},limb_tracking:limbStats,motion_summary:motionSummary,motion_timeseries:motionSeries,frames:samples,
      limitations:['Single-person pose only','Browser-based processing','No camera tracking','No AI generation']};
    window.motionReport=report;
-   reviewDecisions={};renderQualityReview();
+   reviewDecisions=restoreReview(localStorage,report,reviewItems(report).items);renderQualityReview();
    $('transfer').disabled=!samples.length;
    $('stats').textContent=JSON.stringify({duration_seconds:+video.duration.toFixed(2),
      samples:samples.length,pose_detected:detected,
@@ -214,12 +215,16 @@ function renderQualityReview(){
   for(const [value,caption] of [['accepted','Chấp nhận'],['rejected','Đánh dấu lỗi']]){
    const btn=document.createElement('button');btn.type='button';btn.textContent=(reviewDecisions[item.id]===value?'✓ ':'')+caption;
    btn.setAttribute('aria-pressed',String(reviewDecisions[item.id]===value));
-   btn.onclick=()=>{reviewDecisions[item.id]=value;renderQualityReview()};row.appendChild(btn);
+   btn.onclick=()=>{reviewDecisions[item.id]=value;saveReview(localStorage,report,reviewDecisions);renderQualityReview()};row.appendChild(btn);
   }
   list.appendChild(row);
  }
  if(!items.length){const note=document.createElement('p');note.textContent='Không có cảnh báo theo ngưỡng hiện tại.';list.appendChild(note)}
  $('reviewExport').disabled=decided!==items.length;
+ const anomalies=handAnomalies(report);
+ const suspected=anomalies.filter(a=>a.classification==='possible_duplicate').length;
+ $('handClassification').textContent='Kiểm tra bàn tay: '+suspected+' khung nghi nhận diện trùng cổ tay · '+(anomalies.length-suspected)+' khung chưa xác định nguyên nhân. Dữ liệu gốc được giữ nguyên.';
+ $('reviewSaved').textContent='Đánh giá được lưu trên trình duyệt hiện tại (không đồng bộ máy khác).';
 }
 $('reviewExport').addEventListener('click',()=>{
  if(!window.motionReport)return;
